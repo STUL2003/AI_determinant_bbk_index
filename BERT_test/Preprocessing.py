@@ -24,7 +24,7 @@ class pdf2tex:
         with open(output_file, "r", encoding="utf-8") as f:
             self._textLatex = f.read()
 
-        os.remove(output_file)
+        #os.remove(output_file)
 
     def _preprocess_for_mathbert(self):
 
