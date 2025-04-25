@@ -6,20 +6,24 @@ from transformers import AutoTokenizer, AutoModel
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import normalize
 from functools import lru_cache
-from typing import Tuple
 import psycopg2
+import contextboost
 
 
 class DocumentProcessor:
-    def __init__(self, model_name = "DeepPavlov/rubert-base-cased-sentence", stopwords_file = "stopwords-ru.txt",
+    def __init__(self, pdf_path, model_name = "DeepPavlov/rubert-base-cased-sentence", stopwords_file = "stopwords-ru.txt",
                  max_seq_length= 512, chunk_overlap = 64):
 
+        self.top = 0
         self.tokenizer, self.model = self._initialize_model(model_name) # Загрузка модели
         self.stopwords = self._load_stopwords(stopwords_file) # загрузка стопслов
         self.reference_topics = self._get_reference_topics() # загрузка тем из бд
         self.max_seq_length = max_seq_length # макс. длина текста
         self.chunk_overlap = chunk_overlap # чанк для перекрытия
-        
+
+        self.raw_text = self.extract_text(pdf_path)
+        self.clean_text = self.preprocess_text(self.raw_text)
+
 
 
     @staticmethod
@@ -38,8 +42,7 @@ class DocumentProcessor:
             print(f"Нет файла: {e}")
             return set()
 
-    @staticmethod
-    def _get_reference_topics():
+    def _get_reference_topics(self, our_index = None):
         connection = psycopg2.connect(
             host="localhost",
             database="BBK_index",
@@ -47,15 +50,15 @@ class DocumentProcessor:
             password="Dima2003",
             port=5432
         )
-        cursor = connection.cursor()
-
         dict_theme = {}
-
-
+        query = ''
+        if self.top == 0: query = r"SELECT * FROM index_bbk WHERE path::text ~ '^[0-9]+\.[0-9]$';"
+        elif self.top == 1: query = rf"SELECT * FROM index_bbk WHERE path::text ~ '^{our_index}\d$'AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 4"
+        elif self.top == 2: query = rf"SELECT * FROM index_bbk WHERE path::text ~ '^{our_index}\d$'AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 5"
 
         with connection.cursor() as cursor:
             cursor.itersize = 1000  # сколько строк подгружать за раз
-            cursor.execute(r"SELECT * FROM index_bbk WHERE path::text ~ '^[0-9]+\.[0-9]$';")
+            cursor.execute(query)
             for row in cursor.fetchall():
                 dict_theme[f"{row[0]} {row[1]}"] = f"{row[1]}. {row[2]}"
 
@@ -82,10 +85,6 @@ class DocumentProcessor:
             if (word.lower() not in self.stopwords or word in keep_words)
                or len(word) >= 2  # Разрешаем 2-буквенные термины
         ]
-
-        # Явно добавляем ботанические термины
-        botany_keywords = {"корневище", "ксилема", "флоэма", "спорангий", "гаметангий"}
-        words += list(botany_keywords)
 
         return " ".join(words)
 
@@ -124,15 +123,10 @@ class DocumentProcessor:
         doc_embedding = np.mean(cls_embeddings, axis=0)
         return normalize(doc_embedding.reshape(1, -1))[0]
 
-    def analyze_document(self, pdf_path):
+    def analyze_document(self):
         try:
 
-            # Извлечение и предобработка текста
-            raw_text = self.extract_text(pdf_path)
-            clean_text = self.preprocess_text(raw_text)
-
-            # Получение эмбеддингов документа с весовым усреднением
-            chunks = self.tokenize_and_chunk(clean_text)
+            chunks = self.tokenize_and_chunk(self.clean_text)
             if not chunks:
                 return {}
 
@@ -157,69 +151,33 @@ class DocumentProcessor:
             doc_embedding = normalize(doc_embedding.reshape(1, -1))[0]
 
             # Анализ ключевых слов
-            doc_words = set(clean_text.split())
+            doc_words = set(self.clean_text.split())
             results = {}
 
             for topic, desc in self.reference_topics.items():
                 # Комбинированная схожесть
                 topic_embedding = self.get_embedding(desc)
                 topic_words = set(desc.split())
-
-                # Косинусная схожесть эмбеддингов
                 cos_sim = cosine_similarity([doc_embedding], [topic_embedding])[0][0]
-
-                # Схожесть по ключевым словам (Jaccard)
                 jaccard_sim = len(doc_words & topic_words) / len(doc_words | topic_words) if doc_words else 0
 
-                # Комбинированный score
                 combined_score = 0.6 * cos_sim + 0.4 * jaccard_sim
                 results[topic] = combined_score
 
-            # Пороговая фильтрация
+            # пороговая фильтрация
             max_score = max(results.values()) if results else 0
             final_scores = {}
             for topic, score in results.items():
                 if score >= 0.7 * max_score and score > 0.2:  # Абсолютный и относительный пороги
                     final_scores[topic] = round(score, 3)
 
-            # Контекстная проверка для микробиологии
-            if "28.4 Микробиология" in final_scores:
-                microbio_keywords = {"бактерии", "микроорганизмы", "плазмида", "конъюгация"}
-                if len(doc_words & microbio_keywords) >= 2:
-                    final_scores["28.4 Микробиология"] *= 1.2  # Бустинг при наличии ключевых терминов
+            cb = contextboost.ContextBoost(final_scores, doc_words)
+            if self.top == 0:
+                cb.processingTop1()
+            elif self.top == 1:
+                cb.processingTop2()
 
-            if "28.5 Ботаника" in final_scores:
-                botany_keywords = {"корень", "стебель", "лист", "фотосинтез", "спора", "гаметофит", "покрытосеменные"}
-                matches = len(doc_words & botany_keywords)
-                if matches >= 3:
-                    final_scores["28.5 Ботаника"] *= 1.5  # Сильный бустинг
-                elif matches >= 1:
-                    final_scores["28.5 Ботаника"] *= 1.2
-
-            if "28.0 Общая биология" in final_scores:
-                obbio_keywords = {"клетка", "митохондрия", "атф", "цитоплазма", "метаболизм"}
-                if len(doc_words & obbio_keywords) >= 3:
-                    final_scores["28.0 Общая биология"] *= 1.5
-
-            if "28.1 Палеонтология" in final_scores:
-                pal_keywords = {"ископаемые", "стратиграфия", "филогения", "геологические периоды", "эволюция"}
-                if len(doc_words & pal_keywords) >= 2:
-                    final_scores["28.1 Палеонтология"] *= 1.4
-
-            if "28.3 Вирусология" in final_scores:
-                virus_keywords = {"вирион", "репликация", "патогенез", "паразитизм", "капсид"}
-                if len(doc_words & virus_keywords) >= 2:
-                    final_scores["28.3 Вирусология"] *= 1.4
-
-            if "28.6 Зоология" in final_scores:
-                zoo_keywords = {"этология", "биоценоз", "анатомия", "физиология", "популяция"}
-                if len(doc_words & zoo_keywords) >= 2:
-                    final_scores["28.6 Зоология"] *= 1.3
-
-            if "28.7 Биология человека. Антропология" in final_scores:
-                chel_keywords = {"антропогенез", "приматология", "гоминиды", "морфология", "генетика"}
-                if len(doc_words & chel_keywords) >= 2:
-                    final_scores["28.7 Биология человека. Антропология"] *= 1.4
+            final_scores = cb.getfinal_scores()
 
             # Нормализация
             total = sum(final_scores.values())
@@ -228,18 +186,26 @@ class DocumentProcessor:
 
             normalized_scores = {k: v / total for k, v in final_scores.items()}
 
+            if self.top == 0 or self.top == 1:
+                self.top += 1
+                our_index = sorted(normalized_scores.items(), key=lambda x: x[1], reverse=True)[0][0].split()[0]
+                self.reference_topics = self._get_reference_topics(our_index)
 
+                # Сохраняем результат рекурсии
+                recursive_scores = self.analyze_document()
+
+                # Возвращаем комбинированный результат (или только рекурсивный)
+                return recursive_scores  # Или {**normalized_scores, **recursive_scores}
             return normalized_scores
-
         except Exception as e:
             raise
 
 
 def main():
-    processor = DocumentProcessor()
+    processor = DocumentProcessor("mikro2.pdf")
 
     try:
-        results = processor.analyze_document("virus2.pdf")
+        results = processor.analyze_document()
         if not results:
             print("No results generated")
             return
@@ -257,3 +223,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
