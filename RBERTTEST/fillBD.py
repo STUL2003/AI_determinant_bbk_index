@@ -19,7 +19,7 @@ with connection.cursor() as cursor:
     cursor.itersize = 1000  # сколько строк подгружать за раз
     #cursor.execute(r"SELECT * FROM index_bbk WHERE path::text ~ '^[0-9]+\.[0-9]$';;")
 
-    cursor.execute(r"SELECT * FROM * index_bbk")
+    cursor.execute(r"SELECT * FROM index_bbk")
     connection.commit()
     #cursor.execute(rf"SELECT * FROM index_bbk WHERE path::text ~ '^{28}\d$'AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 4")
     i = 0

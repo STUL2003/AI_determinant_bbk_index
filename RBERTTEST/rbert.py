@@ -8,130 +8,197 @@ from sklearn.preprocessing import normalize
 from functools import lru_cache
 import psycopg2
 import contextboost
+from sklearn.feature_extraction.text import TfidfVectorizer
+from torch import nn
+from skopt import BayesSearchCV
+from skopt.space import Real
+from sklearn.base import BaseEstimator, RegressorMixin
+import warnings
+from typing import Dict, List, Optional, Union
 
-
-class DocumentProcessor:
-    def __init__(self, pdf_path, model_name = "DeepPavlov/rubert-base-cased-sentence", stopwords_file = "stopwords-ru.txt",
-                 max_seq_length= 512, chunk_overlap = 64):
-
-        self.top = 0
-        self.tokenizer, self.model = self._initialize_model(model_name) # Загрузка модели
-        self.stopwords = self._load_stopwords(stopwords_file) # загрузка стопслов
-        self.reference_topics = self._get_reference_topics() # загрузка тем из бд
-        self.max_seq_length = max_seq_length # макс. длина текста
-        self.chunk_overlap = chunk_overlap # чанк для перекрытия
-
-        self.raw_text = self.extract_text(pdf_path)
-        self.clean_text = self.preprocess_text(self.raw_text)
+# Настройка логирования
 
 
 
-    @staticmethod
-    def _initialize_model(model_name): # загрузка модеи
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModel.from_pretrained(model_name)
-        return tokenizer, model
+class BertWithAttention(nn.Module):
+    """BERT модель с механизмом внимания для чанков"""
+
+    def __init__(self, model_name: str):
+        super().__init__()
+        self.bert = AutoModel.from_pretrained(model_name)
+        self.attention = nn.Linear(self.bert.config.hidden_size, 1)
+
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        # Убираем token_type_ids явно
+        outputs = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=None
+        )
+        embeddings = outputs.last_hidden_state
+        weights = torch.softmax(self.attention(embeddings), dim=1)
+        return torch.sum(weights * embeddings, dim=1)
 
 
-    @staticmethod
-    def _load_stopwords(file_path):  # Загрузка стопслов с файла наа гитхабе
+class DocumentProcessor(BaseEstimator, RegressorMixin):
+    """Улучшенный процессор документов с Bayesian оптимизацией"""
+
+    def __init__(
+            self,
+            model_name: str = "DeepPavlov/rubert-base-cased-sentence",
+            stopwords_file: str = "stopwords-ru.txt",
+            max_seq_length: int = 512,
+            chunk_overlap: int = 64,
+            bert_weight: float = 0.7,
+            keyword_weight: float = 0.3,
+            relative_threshold: float = 0.7,
+            absolute_threshold: float = 0.2,
+            use_attention: bool = True,
+            db_config: Optional[Dict] = None
+    ):
+        self.model_name = model_name
+        self.stopwords_file = stopwords_file
+        self.max_seq_length = max_seq_length
+        self.chunk_overlap = chunk_overlap
+        self.bert_weight = bert_weight
+        self.keyword_weight = keyword_weight
+        self.relative_threshold = relative_threshold
+        self.absolute_threshold = absolute_threshold
+        self.use_attention = use_attention
+        self.db_config = db_config or {
+            'host': 'localhost',
+            'database': 'BBK_index',
+            'user': 'postgres',
+            'password': 'Dima2003',
+            'port': 5432
+        }
+        self.top = 0  # Уровень классификации (0, 1, 2)
+        self._initialize_components()
+
+    def _initialize_components(self):
+        """Инициализация всех компонентов системы"""
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+            self.model = BertWithAttention(self.model_name) if self.use_attention else AutoModel.from_pretrained(
+                self.model_name)
+            self.stopwords = self._load_stopwords()
+            self._init_tfidf()
+            self.reference_topics = self._load_reference_topics()
+        except Exception as e:
+            raise
+
+    def _load_stopwords(self) -> set:
+        try:
+            with open(self.stopwords_file, 'r', encoding='utf-8') as f:
                 return {line.strip() for line in f if line.strip()}
         except Exception as e:
-            print(f"Нет файла: {e}")
             return set()
 
-    def _get_reference_topics(self, our_index = None):
-        connection = psycopg2.connect(
-            host="localhost",
-            database="BBK_index",
-            user="postgres",
-            password="Dima2003",
-            port=5432
+    def _init_tfidf(self):
+        """Инициализация TF-IDF векторайзера"""
+        self.tfidf = TfidfVectorizer(
+            tokenizer=lambda x: x.split(),
+            binary=False,
+            min_df=2,
+            max_df=0.95,
+            max_features=10000,
+            stop_words=list(self.stopwords)
         )
-        dict_theme = {}
-        query = ''
-        if self.top == 0: query = r"SELECT * FROM index_bbk WHERE path::text ~ '^[0-9]+\.[0-9]$';"
-        elif self.top == 1: query = rf"SELECT * FROM index_bbk WHERE path::text ~ '^{our_index}\d$'AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 4"
-        elif self.top == 2: query = rf"SELECT * FROM index_bbk WHERE path::text ~ '^{our_index}\d$'AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 5"
+        self.tfidf_fitted = False
 
-        with connection.cursor() as cursor:
-            cursor.itersize = 1000  # сколько строк подгружать за раз
-            cursor.execute(query)
-            for row in cursor.fetchall():
-                dict_theme[f"{row[0]} {row[1]}"] = f"{row[1]}. {row[2]}"
+    def _load_reference_topics(self, our_index: Optional[str] = None) -> Dict[str, str]:
+        """Загрузка тем из БД с обработкой ошибок"""
+        try:
+            connection = psycopg2.connect(**self.db_config)
+            dict_theme = {}
 
-        return dict_theme
+            if self.top == 0:
+                query = r"SELECT * FROM index_bbk WHERE path::text ~ '^[0-9]+\.[0-9]$';"
+            elif self.top == 1:
+                query = rf"SELECT * FROM index_bbk WHERE path::text ~ '^{our_index}\d$' AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 4"
+            elif self.top == 2:
+                query = rf"SELECT * FROM index_bbk WHERE path::text ~ '^{our_index}\d$' AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 5"
 
-    def extract_text(self, pdf_path, start_page = 0): # извлечение текста
-        with pdfplumber.open(pdf_path) as pdf:
-            text_pages = []
-            for i, page in enumerate(pdf.pages[start_page:], start=start_page):
-                text = page.extract_text()
-                if text: text_pages.append(text)
+            with connection.cursor() as cursor:
+                cursor.execute(query)
+                for row in cursor.fetchall():
+                    dict_theme[f"{row[0]} {row[1]}"] = f"{row[1]}. {row[2]}"
 
-            return " ".join(text_pages) if text_pages else ""
+            return dict_theme
+        except Exception as e:
+            return {}
+        finally:
+            if 'connection' in locals():
+                connection.close()
 
-    # Пример модификации:
-    def preprocess_text(self, text):
-        # Сохраняем латинские названия и формулы
-        text = re.sub(r'\b(рис|рисунок|табл)\.?\s*\d*[\.,]?\d*\b', ' ', text, flags=re.IGNORECASE)
-        text = re.sub(r'[^\w\s.,!?\-—:;()%&§©®℗℠™°×÷π²√∅≈≠≤≥±→←↑↓∆ℓ∈∉∩∪∏∑−∛₀₁₂₃₄₅₆₇₈₉]', ' ', text)
+    def extract_text(self, pdf_path: str, start_page: int = 0) -> str:
+        """Извлечение текста из PDF с обработкой ошибок"""
+        try:
+            with pdfplumber.open(pdf_path) as pdf:
+                text_pages = []
+                for i, page in enumerate(pdf.pages[start_page:], start=start_page):
+                    text = page.extract_text()
+                    if text:
+                        text_pages.append(text)
+                result = " ".join(text_pages) if text_pages else ""
+                return result
+        except Exception as e:
+            return ""
 
-        keep_words = {"атф", "днк", "рнк", "корень", "стебель", "фотосинтез", "гаметофит"}
-        words = [
-            word.lower() for word in text.split()
-            if (word.lower() not in self.stopwords or word in keep_words)
-               or len(word) >= 2  # Разрешаем 2-буквенные термины
-        ]
+    def preprocess_text(self, text: str) -> str:
+        try:
+            # Удаление лишних символов и графических элементов
+            text = re.sub(r'\b(рис|рисунок|табл)\.?\s*\d*[\.,]?\d*\b', ' ', text, flags=re.IGNORECASE)
+            text = re.sub(r'[^\w\s.,!?\-—:;()%&§©®℗℠™°×÷π²√∅≈≠≤≥±→←↑↓∆ℓ∈∉∩∪∏∑−∛₀₁₂₃₄₅₆₇₈₉]', ' ', text)
 
-        return " ".join(words)
+            # Список важных биологических терминов
+            keep_words = {
+                "атф", "днк", "рнк", "корень", "стебель", "фотосинтез", "гаметофит",
+                "митохондрия", "рибосома", "плазмида", "хлоропласт", "кариотип"
+            }
 
-    def tokenize_and_chunk(self, text):
-        # Разбиваем по предложениям, а не фиксированной длине
-        sentences = re.split(r'(?<=[.!?])\s+', text)
-        chunks = []
-        current_chunk = []
+            words = [
+                word.lower() for word in text.split()
+                if (word.lower() not in self.stopwords or word.lower() in keep_words)
+                   and len(word) >= 2
+            ]
+            return " ".join(words)
+        except Exception as e:
+            return ""
 
-        for sent in sentences:
-            tokens = self.tokenizer.tokenize(sent)
-            if len(current_chunk) + len(tokens) <= self.max_seq_length:
-                current_chunk.extend(tokens)
-            else:
+    def tokenize_and_chunk(self, text: str):
+        if not text:
+            return []
+
+        try:
+            sentences = re.split(r'(?<=[.!?])\s+', text)
+            chunks = []
+            current_chunk = []
+
+            for sent in sentences:
+                tokens = self.tokenizer.tokenize(sent)
+                if len(current_chunk) + len(tokens) <= self.max_seq_length:
+                    current_chunk.extend(tokens)
+                else:
+                    chunks.append(self.tokenizer.convert_tokens_to_string(current_chunk))
+                    current_chunk = tokens[-self.chunk_overlap:] if self.chunk_overlap > 0 else []
+
+            if current_chunk:
                 chunks.append(self.tokenizer.convert_tokens_to_string(current_chunk))
-                current_chunk = tokens[-self.chunk_overlap:]  # Перекрытие
 
-        if current_chunk:
-            chunks.append(self.tokenizer.convert_tokens_to_string(current_chunk))
-
-        return chunks
+            return chunks
+        except Exception as e:
+            return []
 
     @lru_cache(maxsize=100)
-    def get_embedding(self, text):
+    def get_embedding(self, text: str) -> np.ndarray:
         chunks = self.tokenize_and_chunk(text)
-        cls_embeddings = []
+        if not chunks:
+            return np.zeros((self.model.bert.config.hidden_size,))
 
+        embeddings = []
         for chunk in chunks:
-            inputs = self.tokenizer(chunk, return_tensors="pt", padding="max_length", truncation=True, max_length=self.max_seq_length)
-
-            with torch.no_grad():
-                outputs = self.model(**inputs)
-                cls_embedding = outputs.last_hidden_state[0, 0, :].numpy()
-                cls_embeddings.append(cls_embedding)
-
-        doc_embedding = np.mean(cls_embeddings, axis=0)
-        return normalize(doc_embedding.reshape(1, -1))[0]
-
-    def analyze_document(self):
-        try:
-
-            chunks = self.tokenize_and_chunk(self.clean_text)
-            if not chunks:
-                return {}
-
-            cls_embeddings = []
-            for chunk in chunks:
+            try:
                 inputs = self.tokenizer(
                     chunk,
                     return_tensors="pt",
@@ -139,88 +206,127 @@ class DocumentProcessor:
                     truncation=True,
                     max_length=self.max_seq_length
                 )
+                # Удаляем token_type_ids, если есть
+                if 'token_type_ids' in inputs:
+                    del inputs['token_type_ids']
 
                 with torch.no_grad():
-                    outputs = self.model(**inputs)
-                    cls_embedding = outputs.last_hidden_state[0, 0, :].numpy()
-                    cls_embeddings.append(cls_embedding)
+                    if self.use_attention:
+                        chunk_emb = self.model(**inputs).numpy()[0]
+                    else:
+                        outputs = self.model(**inputs)
+                        chunk_emb = outputs.last_hidden_state[0, 0, :].numpy()
+                    embeddings.append(chunk_emb)
+            except Exception as e:
+                continue
 
-            # Взвешенное усреднение (больший вес последним чанкам)
-            weights = np.linspace(0.5, 1.5, len(cls_embeddings))
-            doc_embedding = np.average(cls_embeddings, axis=0, weights=weights)
-            doc_embedding = normalize(doc_embedding.reshape(1, -1))[0]
+        if not embeddings:
+            return np.zeros((self.model.bert.config.hidden_size,))
 
-            # Анализ ключевых слов
-            doc_words = set(self.clean_text.split())
-            results = {}
+        doc_embedding = np.mean(embeddings, axis=0)
+        return normalize(doc_embedding.reshape(1, -1))[0]
 
-            for topic, desc in self.reference_topics.items():
-                # Комбинированная схожесть
-                topic_embedding = self.get_embedding(desc)
-                topic_words = set(desc.split())
-                cos_sim = cosine_similarity([doc_embedding], [topic_embedding])[0][0]
-                jaccard_sim = len(doc_words & topic_words) / len(doc_words | topic_words) if doc_words else 0
-
-                combined_score = 0.6 * cos_sim + 0.4 * jaccard_sim
-                results[topic] = combined_score
-
-            # пороговая фильтрация
-            max_score = max(results.values()) if results else 0
-            final_scores = {}
-            for topic, score in results.items():
-                if score >= 0.7 * max_score and score > 0.2:  # Абсолютный и относительный пороги
-                    final_scores[topic] = round(score, 3)
-
-            cb = contextboost.ContextBoost(final_scores, doc_words)
-            if self.top == 0:
-                cb.processingTop1()
-            elif self.top == 1:
-                cb.processingTop2()
-
-            final_scores = cb.getfinal_scores()
-
-            # Нормализация
-            total = sum(final_scores.values())
-            if total == 0:
-                return {}
-
-            normalized_scores = {k: v / total for k, v in final_scores.items()}
-
-            if self.top == 0 or self.top == 1:
-                self.top += 1
-                our_index = sorted(normalized_scores.items(), key=lambda x: x[1], reverse=True)[0][0].split()[0]
-                self.reference_topics = self._get_reference_topics(our_index)
-
-                # Сохраняем результат рекурсии
-                recursive_scores = self.analyze_document()
-
-                # Возвращаем комбинированный результат (или только рекурсивный)
-                return recursive_scores  # Или {**normalized_scores, **recursive_scores}
-            return normalized_scores
+    def _fit_tfidf(self, texts: List[str]):
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                self.tfidf.fit(texts)
+                self.tfidf_fitted = True
         except Exception as e:
-            raise
+            self.tfidf_fitted = False
 
+    def _get_tfidf_weight(self, word):
+        if not self.tfidf_fitted:
+            return 0.0
+
+
+        try:
+            return self.tfidf.idf_[self.tfidf.vocabulary_[word.lower()]]
+        except (KeyError, AttributeError):
+            return 0.0
+
+    def jaccard_tfidf(self, doc_words, topic_words):
+        if not doc_words or not topic_words or not self.tfidf_fitted:
+            return 0.0
+
+        try:
+            common = doc_words & topic_words
+            union = doc_words | topic_words
+            numerator = sum(self._get_tfidf_weight(w) for w in common)
+            denominator = sum(self._get_tfidf_weight(w) for w in union)
+            return numerator / denominator if denominator else 0.0
+        except Exception as e:
+            return 0.0
+
+    def analyze_document(self,  pdf_path = None, text = None):
+        try:
+            if text is None:
+                if pdf_path is None:
+                    raise ValueError()
+                text = self.extract_text(pdf_path)
+
+            clean_text = self.preprocess_text(text)
+            doc_embedding = self.get_embedding(clean_text)
+            doc_words = set(clean_text.split())
+            if not hasattr(self, 'tfidf_fitted'):
+                self._fit_tfidf([clean_text] + list(self.reference_topics.values()))
+
+            results = {}
+            for topic, desc in self.reference_topics.items():
+                topic_emb = self.get_embedding(desc)
+                topic_words = set(desc.split())
+
+                cos_sim = cosine_similarity([doc_embedding], [topic_emb])[0][0]
+                jaccard_sim = self.jaccard_tfidf(doc_words, topic_words)
+                combined = (self.bert_weight * cos_sim +
+                            self.keyword_weight * jaccard_sim)
+                results[topic] = combined
+
+            # Фильтрация с учетом порогов
+            max_score = max(results.values(), default=0)
+            final_scores = {
+                k: v for k, v in results.items()
+                if v >= self.relative_threshold * max_score
+                   and v > self.absolute_threshold
+            }
+
+            if final_scores:
+                cb = contextboost.ContextBoost(final_scores, doc_words)
+                if self.top == 0:
+                    cb.processingTop1()
+                elif self.top == 1:
+                    cb.processingTop2()
+                final_scores = cb.getfinal_scores()
+
+            if self.top < 2 and final_scores:
+                self.top += 1
+                best_topic = max(final_scores.items(), key=lambda x: x[1])
+                our_index = best_topic[0].split()[0]
+                self.reference_topics = self._load_reference_topics(our_index)
+                recursive_scores = self.analyze_document(text=text)
+                self.top -= 1
+                return recursive_scores
+
+            return self._normalize_scores(final_scores)
+
+        except Exception as e:
+            return {}
+
+    def _normalize_scores(self, scores):
+        total = sum(scores.values())
+        return {k: v / total for k, v in scores.items()} if total else {}
 
 def main():
-    processor = DocumentProcessor("mikro2.pdf")
-
     try:
-        results = processor.analyze_document()
-        if not results:
-            print("No results generated")
-            return
-
+        processor = DocumentProcessor()
+        results = processor.analyze_document("mikro2.pdf")
         print("\nDocument Topics:")
-        for topic, score in sorted(results.items(),
-                                   key=lambda x: -x[1]):
+        for topic, score in sorted(results.items(), key=lambda x: -x[1]):
             print(f"- {topic}: {score:.3f}")
 
-    except KeyboardInterrupt:
-        print("\nProcessing interrupted")
     except Exception as e:
-        print(f"Critical error: {e}")
+        print(f"Application error: {e}")
 
 
 if __name__ == "__main__":
     main()
-
