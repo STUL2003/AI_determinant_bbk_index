@@ -10,15 +10,8 @@ import psycopg2
 import contextboost
 from sklearn.feature_extraction.text import TfidfVectorizer
 from torch import nn
-from skopt import BayesSearchCV
-from skopt.space import Real
 from sklearn.base import BaseEstimator, RegressorMixin
 import warnings
-from typing import Dict, List, Optional, Union
-
-# Настройка логирования
-
-
 
 class BertWithAttention(nn.Module):
     """BERT модель с механизмом внимания для чанков"""
@@ -41,20 +34,18 @@ class BertWithAttention(nn.Module):
 
 
 class DocumentProcessor(BaseEstimator, RegressorMixin):
-    """Улучшенный процессор документов с Bayesian оптимизацией"""
-
     def __init__(
             self,
-            model_name: str = "DeepPavlov/rubert-base-cased-sentence",
-            stopwords_file: str = "stopwords-ru.txt",
-            max_seq_length: int = 512,
-            chunk_overlap: int = 64,
-            bert_weight: float = 0.7,
-            keyword_weight: float = 0.3,
-            relative_threshold: float = 0.7,
-            absolute_threshold: float = 0.2,
-            use_attention: bool = True,
-            db_config: Optional[Dict] = None
+            model_name = "DeepPavlov/rubert-base-cased-sentence",
+            stopwords_file= "stopwords-ru.txt",
+            max_seq_length = 512,
+            chunk_overlap = 64,
+            bert_weight = 0.7,
+            keyword_weight = 0.3,
+            relative_threshold = 0.7,
+            absolute_threshold = 0.2,
+            use_attention = True,
+            db_config = None
     ):
         self.model_name = model_name
         self.stopwords_file = stopwords_file
@@ -87,7 +78,7 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
         except Exception as e:
             raise
 
-    def _load_stopwords(self) -> set:
+    def _load_stopwords(self):
         try:
             with open(self.stopwords_file, 'r', encoding='utf-8') as f:
                 return {line.strip() for line in f if line.strip()}
@@ -106,23 +97,25 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
         )
         self.tfidf_fitted = False
 
-    def _load_reference_topics(self, our_index: Optional[str] = None) -> Dict[str, str]:
+    def _load_reference_topics(self, our_index = None):
         """Загрузка тем из БД с обработкой ошибок"""
         try:
             connection = psycopg2.connect(**self.db_config)
             dict_theme = {}
-
             if self.top == 0:
-                query = r"SELECT * FROM index_bbk WHERE path::text ~ '^[0-9]+\.[0-9]$';"
-            elif self.top == 1:
-                query = rf"SELECT * FROM index_bbk WHERE path::text ~ '^{our_index}\d$' AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 4"
+                query = r"SELECT * FROM index_bbk WHERE length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 2"
+            if self.top == 1:
+
+                query = rf"SELECT * FROM index_bbk WHERE path::text ~ '^{our_index+'.'}\d$' AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 3"
             elif self.top == 2:
+                query = rf"SELECT * FROM index_bbk WHERE path::text ~ '^{our_index}\d$' AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 4"
+            elif self.top == 3:
                 query = rf"SELECT * FROM index_bbk WHERE path::text ~ '^{our_index}\d$' AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 5"
 
             with connection.cursor() as cursor:
                 cursor.execute(query)
                 for row in cursor.fetchall():
-                    dict_theme[f"{row[0]} {row[1]}"] = f"{row[1]}. {row[2]}"
+                    dict_theme[f"{row[0]} {row[1]}"]=f"{row[1]}. {row[2]}"
 
             return dict_theme
         except Exception as e:
@@ -131,7 +124,7 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
             if 'connection' in locals():
                 connection.close()
 
-    def extract_text(self, pdf_path: str, start_page: int = 0) -> str:
+    def extract_text(self, pdf_path, start_page= 0):
         """Извлечение текста из PDF с обработкой ошибок"""
         try:
             with pdfplumber.open(pdf_path) as pdf:
@@ -145,28 +138,20 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
         except Exception as e:
             return ""
 
-    def preprocess_text(self, text: str) -> str:
+    def preprocess_text(self, text):
         try:
             # Удаление лишних символов и графических элементов
             text = re.sub(r'\b(рис|рисунок|табл)\.?\s*\d*[\.,]?\d*\b', ' ', text, flags=re.IGNORECASE)
             text = re.sub(r'[^\w\s.,!?\-—:;()%&§©®℗℠™°×÷π²√∅≈≠≤≥±→←↑↓∆ℓ∈∉∩∪∏∑−∛₀₁₂₃₄₅₆₇₈₉]', ' ', text)
 
-            # Список важных биологических терминов
-            keep_words = {
-                "атф", "днк", "рнк", "корень", "стебель", "фотосинтез", "гаметофит",
-                "митохондрия", "рибосома", "плазмида", "хлоропласт", "кариотип"
-            }
-
             words = [
                 word.lower() for word in text.split()
-                if (word.lower() not in self.stopwords or word.lower() in keep_words)
-                   and len(word) >= 2
             ]
             return " ".join(words)
         except Exception as e:
             return ""
 
-    def tokenize_and_chunk(self, text: str):
+    def tokenize_and_chunk(self, text):
         if not text:
             return []
 
@@ -191,7 +176,7 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
             return []
 
     @lru_cache(maxsize=100)
-    def get_embedding(self, text: str) -> np.ndarray:
+    def get_embedding(self, text):
         chunks = self.tokenize_and_chunk(text)
         if not chunks:
             return np.zeros((self.model.bert.config.hidden_size,))
@@ -206,7 +191,6 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
                     truncation=True,
                     max_length=self.max_seq_length
                 )
-                # Удаляем token_type_ids, если есть
                 if 'token_type_ids' in inputs:
                     del inputs['token_type_ids']
 
@@ -226,7 +210,7 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
         doc_embedding = np.mean(embeddings, axis=0)
         return normalize(doc_embedding.reshape(1, -1))[0]
 
-    def _fit_tfidf(self, texts: List[str]):
+    def _fit_tfidf(self, texts):
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
@@ -282,30 +266,32 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
                             self.keyword_weight * jaccard_sim)
                 results[topic] = combined
 
-            # Фильтрация с учетом порогов
-            max_score = max(results.values(), default=0)
+
+            max_score = max(results.values(), default=0)# Фильтрация с учетом порогов
             final_scores = {
                 k: v for k, v in results.items()
-                if v >= self.relative_threshold * max_score
-                   and v > self.absolute_threshold
+                if v>=self.relative_threshold * max_score
+                   and v>self.absolute_threshold
             }
 
             if final_scores:
-                cb = contextboost.ContextBoost(final_scores, doc_words)
-                if self.top == 0:
-                    cb.processingTop1()
-                elif self.top == 1:
-                    cb.processingTop2()
-                final_scores = cb.getfinal_scores()
+                 cb = contextboost.ContextBoost(final_scores, doc_words)
+                 if self.top== 0:
+                     cb.processingTop0()
+                 elif self.top == 1:
+                     cb.processingTop1()
+                 elif self.top == 2:
+                     cb.processingTop2()
+                 final_scores = cb.getfinal_scores()
 
-            if self.top < 2 and final_scores:
+            if self.top < 3 and final_scores:
                 self.top += 1
                 best_topic = max(final_scores.items(), key=lambda x: x[1])
                 our_index = best_topic[0].split()[0]
                 self.reference_topics = self._load_reference_topics(our_index)
                 recursive_scores = self.analyze_document(text=text)
                 self.top -= 1
-                return recursive_scores
+                return self._normalize_scores(final_scores)
 
             return self._normalize_scores(final_scores)
 
@@ -319,13 +305,13 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
 def main():
     try:
         processor = DocumentProcessor()
-        results = processor.analyze_document("mikro2.pdf")
-        print("\nDocument Topics:")
+        results = processor.analyze_document("24.1.pdf")
+        print("\nТоп индексов:")
         for topic, score in sorted(results.items(), key=lambda x: -x[1]):
             print(f"- {topic}: {score:.3f}")
 
     except Exception as e:
-        print(f"Application error: {e}")
+        print(e)
 
 
 if __name__ == "__main__":
