@@ -65,6 +65,7 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
         }
         self.top = 0  # Уровень классификации (0, 1, 2)
         self._initialize_components()
+        self._res ={}
 
     def _initialize_components(self):
         """Инициализация всех компонентов системы"""
@@ -282,6 +283,8 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
                      cb.processingTop1()
                  elif self.top == 2:
                      cb.processingTop2()
+                 elif self.top == 3:
+                     cb.processingTop3()
                  final_scores = cb.getfinal_scores()
 
             if self.top < 3 and final_scores:
@@ -289,11 +292,23 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
                 best_topic = max(final_scores.items(), key=lambda x: x[1])
                 our_index = best_topic[0].split()[0]
                 self.reference_topics = self._load_reference_topics(our_index)
-                recursive_scores = self.analyze_document(text=text)
+                self.recursive_scores = self.analyze_document(text=text)
+                if self.top ==  3:
+                    with open("res.txt", "a", encoding="utf-8") as f:
+                        f.write("\n".join([f"{k}: {v:.4f}" for k, v in sorted(self._normalize_scores(final_scores).items(), key=lambda item: item[1], reverse=True)[:2]]) + "\n\n")
+                else:
+                    with open("res.txt", "a", encoding="utf-8") as f:
+                        f.write("\n".join([f"{k}: {v:.4f}" for k, v in
+                                           sorted(self._normalize_scores(final_scores).items(),
+                                                  key=lambda item: item[1], reverse=True)[:1]]) + "\n\n")
                 self.top -= 1
-                return self._normalize_scores(final_scores)
 
-            return self._normalize_scores(final_scores)
+                return
+            with open("res.txt", "a", encoding="utf-8") as f:
+                f.write("\n".join([f"{k}: {v:.4f}" for k, v in
+                                   sorted(self._normalize_scores(final_scores).items(), key=lambda item: item[1],
+                                          reverse=True)[:4]]) + "\n\n")
+            return
 
         except Exception as e:
             return {}
@@ -305,10 +320,8 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
 def main():
     try:
         processor = DocumentProcessor()
-        results = processor.analyze_document("24.1.pdf")
-        print("\nТоп индексов:")
-        for topic, score in sorted(results.items(), key=lambda x: -x[1]):
-            print(f"- {topic}: {score:.3f}")
+        with open('res.txt', 'w') as f:f.write('')
+        processor.analyze_document("books\\24.1.pdf")
 
     except Exception as e:
         print(e)

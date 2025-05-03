@@ -19,549 +19,675 @@ class ContextBoost:
         return keyset
 
     def processingTop0(self):
-        # 26 Науки о Земле
-        if "26 Науки о Земле" in self.__final_scores:
-            earth_science_keywords = self.getKeySet(26.)
+        config = [
+            ("26 Науки о Земле", 26, 3, 5, 1.8, 3, 1.4),
+            ("22 Физико-математические науки", 22, 3, 5, 1.8, 3, 1.4),
+            ("24 Химические науки", 24, 3, 5, 1.8, 3, 1.4),
+            ("28 Биологические науки", 28, 3, 5, 1.8, 3, 1.4)
+        ]
 
-            self.__cursor.execute(rf"""SELECT path FROM index_bbk WHERE path::text ~ '^26\.\d$' AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 3""")
-            for row in self.__cursor.fetchall():
-                earth_science_keywords = earth_science_keywords.union(self.getKeySet(row[0]))
+        for name, code, path_len, th1, mul1, th2, mul2 in config:
+            if name in self.__final_scores:
+                keywords = self.getKeySet(float(code))
+                self.__cursor.execute(f"""SELECT path FROM index_bbk 
+                    WHERE path::text ~ '^{code}\.\d$' 
+                    AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = {path_len}""")
+                for row in self.__cursor.fetchall():
+                    keywords = keywords.union(self.getKeySet(row[0]))
 
-            matches = len(self.__doc_words & earth_science_keywords)
-            if matches >= 5:
-                self.__final_scores["26 Науки о Земле"] *= 1.8
-            elif matches >= 3:
-                self.__final_scores["26 Науки о Земле"] *= 1.4
-
-        # 22 Физико-математические науки
-        if "22 Физико-математические науки" in self.__final_scores:
-            physics_math_keywords = self.getKeySet(22.)
-
-            self.__cursor.execute(rf"""SELECT path FROM index_bbk WHERE path::text ~ '^22\.\d$' AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 3""")
-            for row in self.__cursor.fetchall():
-                physics_math_keywords = physics_math_keywords.union(self.getKeySet(row[0]))
-
-            matches = len(self.__doc_words & physics_math_keywords)
-            if matches >= 5:
-                self.__final_scores["22 Физико-математические науки"] *= 1.8
-            elif matches >= 3:
-                self.__final_scores["22 Физико-математические науки"] *= 1.4
-
-        # 24 Химические науки
-        if "24 Химические науки" in self.__final_scores:
-            chemistry_keywords = self.getKeySet(24.)
-
-            self.__cursor.execute(rf"""SELECT path FROM index_bbk WHERE path::text ~ '^24\.\d$' AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 3""")
-            for row in self.__cursor.fetchall():
-                chemistry_keywords = chemistry_keywords.union(self.getKeySet(row[0]))
-
-            matches = len(self.__doc_words & chemistry_keywords)
-            if matches >= 5:
-                self.__final_scores["24 Химические науки"] *= 1.8
-            elif matches >= 3:
-                self.__final_scores["24 Химические науки"] *= 1.4
-
-        # 28 Биологические науки
-        if "28 Биологические науки" in self.__final_scores:
-            biology_keywords = self.getKeySet(28.)
-            self.__cursor.execute(rf"""SELECT path FROM index_bbk WHERE path::text ~ '^28\.\d$' AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 3""")
-            for row in self.__cursor.fetchall():
-                biology_keywords = biology_keywords.union(self.getKeySet(row[0]))
-            matches = len(self.__doc_words & biology_keywords)
-            if matches >= 5:
-                self.__final_scores["28 Биологические науки"] *= 1.8
-            elif matches >= 3:
-                self.__final_scores["28 Биологические науки"] *= 1.4
+                matches = len(self.__doc_words & keywords)
+                if matches >= th1:
+                    self.__final_scores[name] *= mul1
+                elif matches >= th2:
+                    self.__final_scores[name] *= mul2
 
     def processingTop1(self):
-        if "28.4 Микробиология" in self.__final_scores:
-            microbio_keywords = self.getKeySet(28.4)
-            matches = len(self.__doc_words & microbio_keywords)
-            if matches >= 3:
-                self.__final_scores["28.4 Микробиология"] *= 1.5
-            elif matches >= 1:
-                self.__final_scores["28.4 Микробиология"] *= 1.2
+        config = [
+            ("28.4 Микробиология", 28.4, [(3, 1.5), (1, 1.2)]),
+            ("28.5 Ботаника", 28.5, [(4, 1.6), (2, 1.3), (1, 1.1)]),
+            ("28.0 Общая биология", 28.0, [(5, 1.8), (3, 1.5), (1, 1.2)]),
+            ("28.1 Палеонтология", 28.1, [(3, 1.6), (1, 1.3)]),
+            ("28.3 Вирусология", 28.3, [(3, 1.7), (1, 1.3)]),
+            ("28.6 Зоология", 28.6, [(4, 1.6), (2, 1.3)]),
+            ("28.7 Биология человека. Антропология", 28.7, [(3, 1.7), (1, 1.3)]),
+            ("26.0 Земля в целом", 26.0, [(5, 1.8), (3, 1.4), (1, 1.1)]),
+            ("26.1 Геодезические науки. Картография. Геоинформатика", 26.1, [(4, 1.7), (2, 1.3), (1, 1.05)]),
+            ("26.2 Геофизические науки", 26.2, [(5, 2.0), (3, 1.5), (1, 1.2)]),
+            ("26.3 Геологические науки", 26.3, [(6, 2.2), (4, 1.7), (2, 1.3)]),
+            ("26.8 Географические науки", 26.8, [(5, 1.9), (3, 1.6), (1, 1.1)]),
+            ("22.1 Математика", 22.1, [(5, 1.8), (3, 1.5), (1, 1.2)]),
+            ("22.2 Механика", 22.2, [(4, 1.7), (2, 1.4), (1, 1.1)]),
+            ("22.3 Физика", 22.3, [(5, 2.0), (3, 1.6), (1, 1.2)]),
+            ("22.6 Астрономия", 22.6, [(6, 2.2), (4, 1.7), (2, 1.3)]),
+            ("24.1 Общая и неорганическая химия", 24.1, [(5, 1.8), (3, 1.5), (1, 1.2)]),
+            ("24.2 Органическая химия", 24.2, [(5, 2.0), (3, 1.6), (1, 1.3)]),
+            ("24.4 Аналитическая химия", 24.4, [(4, 1.7), (2, 1.4), (1, 1.1)]),
+            ("24.5 Физическая химия. Химическая физика", 24.5, [(6, 2.2), (4, 1.8), (2, 1.4)]),
+            ("24.6 Коллоидная химия", 24.6, [(3, 1.6), (1, 1.3)]),
+            ("24.7 Химия полимеров", 24.7, [(5, 1.9), (3, 1.6), (1, 1.2)]),
+            ("24.8 Нанохимия", 24.8, [(6, 2.4), (4, 1.9), (2, 1.5)])
+        ]
 
-        if "28.5 Ботаника" in self.__final_scores:
-            botany_keywords = self.getKeySet(28.5)
-            matches = len(self.__doc_words & botany_keywords)
-            if matches >= 4:
-                self.__final_scores["28.5 Ботаника"] *= 1.6
-            elif matches >= 2:
-                self.__final_scores["28.5 Ботаника"] *= 1.3
-            elif matches >= 1:
-                self.__final_scores["28.5 Ботаника"] *= 1.1
-
-        if "28.0 Общая биология" in self.__final_scores:
-            obbio_keywords  = self.getKeySet(28.0)
-            matches = len(self.__doc_words & obbio_keywords)
-            if matches >= 5:
-                self.__final_scores["28.0 Общая биология"] *= 1.8
-            elif matches >= 3:
-                self.__final_scores["28.0 Общая биология"] *= 1.5
-            elif matches >= 1:
-                self.__final_scores["28.0 Общая биология"] *= 1.2
-
-        if "28.1 Палеонтология" in self.__final_scores:
-            pal_keywords = self.getKeySet(28.1)
-            matches = len(self.__doc_words & pal_keywords)
-            if matches >= 3:
-                self.__final_scores["28.1 Палеонтология"] *= 1.6
-            elif matches >= 1:
-                self.__final_scores["28.1 Палеонтология"] *= 1.3
-
-        if "28.3 Вирусология" in self.__final_scores:
-            virus_keywords = self.getKeySet(28.3)
-            matches = len(self.__doc_words & virus_keywords)
-            if matches >= 3:
-                self.__final_scores["28.3 Вирусология"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.3 Вирусология"] *= 1.3
-
-        if "28.6 Зоология" in self.__final_scores:
-            zoo_keywords = self.getKeySet(28.6)
-            matches = len(self.__doc_words & zoo_keywords)
-            if matches >= 4:
-                self.__final_scores["28.6 Зоология"] *= 1.6
-            elif matches >= 2:
-                self.__final_scores["28.6 Зоология"] *= 1.3
-
-        if "28.7 Биология человека. Антропология" in self.__final_scores:
-            chel_keywords = self.getKeySet(28.7)
-            matches = len(self.__doc_words & chel_keywords)
-            if matches >= 3:
-                self.__final_scores["28.7 Биология человека. Антропология"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.7 Биология человека. Антропология"] *= 1.3
+        for name, code, thresholds in config:
+            if name in self.__final_scores:
+                keywords = self.getKeySet(code)
+                self.__cursor.execute(f"""SELECT path FROM index_bbk 
+                    WHERE path::text ~ '^{code}\.\d$' 
+                    AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = {4}""")
+                for row in self.__cursor.fetchall():
+                    keywords = keywords.union(self.getKeySet(row[0]))
+                matches = len(self.__doc_words & keywords)
+                for th, mul in sorted(thresholds, reverse=True):
+                    if matches >= th:
+                        self.__final_scores[name] *= mul
+                        break
 
     def processingTop2(self):
-        if "28.00 Теоретическая биология" in self.__final_scores:
-            teorbio_keywords = self.getKeySet(28.00)
-            matches = len(self.__doc_words & teorbio_keywords)
-            if matches >= 4:
-                self.__final_scores["28.00 Теоретическая биология"] *= 1.7
-            elif matches >= 2:
-                self.__final_scores["28.00 Теоретическая биология"] *= 1.4
+        categories = [
+            # Формат: (название, код, [(порог1, множитель1), (порог2, множитель2), ...])
+            ("28.00 Теоретическая биология", 28.00, [(4, 1.7), (2, 1.4)]),
+            ("28.01 Жизнь. Живые системы", 28.01, [(5, 1.8), (3, 1.5), (1, 1.2)]),
+            ("28.02 Эволюционная биология", 28.02, [(5, 1.9), (3, 1.6), (1, 1.3)]),
+            ("28.04 Общая генетика", 28.04, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.05 Общая цитология", 28.05, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.09 Общая систематика организмов", 28.09, [(4, 1.8), (2, 1.5)]),
+            ("28.12 Биостратиграфия", 28.12, [(3, 1.7), (1, 1.4)]),
+            ("28.14 Микропалеонтология", 28.14, [(3, 1.7), (1, 1.4)]),
+            ("28.15 Палеоботаника", 28.15, [(3, 1.7), (1, 1.4)]),
+            ("28.31 Происхождение вирусов", 28.31, [(3, 1.8), (1, 1.5)]),
+            ("28.33 Жизненные циклы вирусов", 28.33, [(4, 1.9), (2, 1.6)]),
+            ("28.34 Генетика вирусов", 28.34, [(4, 1.9), (2, 1.6)]),
+            ("28.36 Морфология вирусов", 28.36, [(3, 1.8), (1, 1.5)]),
+            ("28.43 Биология развития микроорганизмов", 28.43, [(4, 1.8), (2, 1.5)]),
+            ("28.46 Морфология микроорганизмов", 28.46, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.39 Систематика вирусов", 28.39, [(4, 1.8), (2, 1.5)]),
+            ("28.41 Происхождение микроорганизмов", 28.41, [(3, 1.8), (1, 1.5)]),
+            ("28.44 Генетика микроорганизмов", 28.44, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.47 Физико-химическая биология микроорганизмов", 28.47, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.51 Растения как живые системы", 28.51, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.52 Эволюционная биология растений", 28.52, [(4, 1.9), (2, 1.6)]),
+            ("28.54 Генетика растений", 28.54, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.66 Морфология, анатомия и гистология животных", 28.66, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.69 Систематика животных", 28.69, [(4, 1.9), (2, 1.6)]),
+            ("28.68 Экология и география животных", 28.68, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.59 Систематика растений", 28.59, [(4, 1.9), (2, 1.6)]),
+            ("28.64 Генетика животных", 28.64, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.62 Эволюционная биология животных", 28.62, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.63 Биология развития животных", 28.63, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.03 Биология развития", 28.03, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.65 Цитология животных", 28.65, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.06 Общая морфология", 28.06, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.07 Физико-химическая биология", 28.07, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.08 Биоэкология", 28.08, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.16 Палеозоология", 28.16, [(4, 1.9), (2, 1.6)]),
+            ("28.32 Эволюция вирусов", 28.32, [(4, 1.9), (2, 1.6)]),
+            ("28.37 Физико-химическая биология вирусов", 28.37, [(4, 1.9), (2, 1.6)]),
+            ("28.38 Экология вирусов", 28.38, [(4, 1.9), (2, 1.6)]),
+            ("28.42 Эволюция микроорганизмов", 28.42, [(4, 1.9), (2, 1.6)]),
+            ("28.45 Цитология микроорганизмов", 28.45, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.48 Экология микроорганизмов", 28.48, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.49 Систематика микроорганизмов", 28.49, [(4, 1.9), (2, 1.6)]),
+            ("28.53 Биология развития растений", 28.53, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.58 Экология растений", 28.58, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.67 Физиология животных", 28.67, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.70 Биология человека", 28.70, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("28.71 Антропология", 28.71, [(5, 2.0), (3, 1.7), (1, 1.4)]),
+            ("24.11 Основные понятия, законы и теории химии", 24.11, [(5, 1.8), (3, 1.5), (1, 1.2)]),
+            ("24.12 Отдельные химические элементы и их соединения", 24.12, [(4, 1.7), (2, 1.4)]),
+            ("24.13 Радиохимия", 24.13, [(5, 2.0), (3, 1.6), (1, 1.3)]),
+            ("24.21 Физическая органическая химия", 24.21, [(6, 2.2), (4, 1.8), (2, 1.4)]),
+            ("24.22 Органические реакции. Органический катализ", 24.22, [(5, 1.9), (3, 1.6)]),
+            ("24.23 Органические соединения", 24.23, [(4, 1.7), (2, 1.3)]),
+            ("24.24 Химия органических производных фуллеренов (органофуллеренов)", 24.24,
+             [(6, 2.4), (4, 1.9), (2, 1.5)]),
+            ("24.41 Теоретические основы аналитической химии", 24.41, [(5, 1.8), (3, 1.5)]),
+            ("24.42 Методы разделения и концентрирования", 24.42, [(4, 1.7), (2, 1.4)]),
+            ("24.43 Методы определения веществ", 24.43, [(5, 2.0), (3, 1.6)]),
+            ("24.44 Неорганический анализ", 24.44, [(4, 1.7), (2, 1.3)]),
+            ("24.45 Органический анализ", 24.45, [(5, 1.9), (3, 1.6)]),
+            ("24.46 Микрохимический анализ", 24.46, [(6, 2.2), (4, 1.8)]),
+            ("24.48 Газовый анализ", 24.48, [(4, 1.7), (2, 1.4)]),
+            ("24.49 Другие методы анализа", 24.49, [(3, 1.6), (1, 1.3)]),
+            ("24.51 Химическая связь и строение молекул", 24.51, [(5, 2.0), (3, 1.7)]),
+            ("24.52 Химия твердого тела", 24.52, [(6, 2.2), (4, 1.8)]),
+            ("24.53 Химическая термодинамика", 24.53, [(5, 1.9), (3, 1.6)]),
+            ("24.54 Химическая кинетика", 24.54, [(4, 1.7), (2, 1.4)]),
+            ("24.55 Фотохимия. Радиационная химия", 24.55, [(6, 2.4), (4, 1.9)]),
+            ("24.56 Растворы. Расплавы", 24.56, [(5, 1.8), (3, 1.5)]),
+            ("24.57 Электрохимия", 24.57, [(4, 1.7), (2, 1.4)]),
+            ("24.58 Поверхностные явления", 24.58, [(5, 2.0), (3, 1.6)]),
+            ("24.59 Химия активации", 24.59, [(6, 2.2), (4, 1.8)]),
+            ("24.61 Общие вопросы коллоидной химии", 24.61, [(4, 1.7), (2, 1.3)]),
+            ("24.62 Физико-химическая механика", 24.62, [(5, 1.9), (3, 1.6)]),
+            ("24.63 Лиофобные системы", 24.63, [(4, 1.7), (2, 1.4)]),
+            ("24.64 Лиофильные системы", 24.64, [(5, 1.8), (3, 1.5)]),
+            ("24.65 Структурированные системы", 24.65, [(6, 2.2), (4, 1.8)]),
+            ("24.66 Грубодисперсные системы", 24.66, [(4, 1.7), (2, 1.4)]),
+            ("24.71 Общие вопросы полимеров", 24.71, [(5, 2.0), (3, 1.6)]),
+            ("24.72 Жидкие кристаллы", 24.72, [(6, 2.4), (4, 1.9)]),
+            ("24.73 Жидкокристаллические полимеры", 24.73, [(5, 2.1), (3, 1.7)]),
+            ("24.81 Основы нанохимии", 24.81, [(6, 2.5), (4, 2.0), (2, 1.6)]),
+            ("24.82 Супрамолекулярная химия", 24.82, [(5, 2.2), (3, 1.8)]),
+            ("24.67 Капиллярно-пористые тела", 24.67, [(4, 1.7), (2, 1.4)]),
+            ("24.69 Другие дисперсные системы", 24.69, [(3, 1.6), (1, 1.3)]),
+            ("26.11 Геодезические науки", 26.11, [(4, 1.7), (2, 1.4)]),
+            ("26.12 Основания математики. Математическая логика", 26.12, [(5, 1.9), (3, 1.6)]),
+            ("26.17 Картография", 26.17, [(4, 1.8), (2, 1.5)]),
+            ("26.19 Геоинформатика", 26.19, [(5, 2.0), (3, 1.7), (1, 1.3)]),
+            ("26.20 Геофизика в целом", 26.20, [(6, 2.2), (4, 1.8)]),
+            ("26.21 Физика Земли", 26.21, [(5, 1.9), (3, 1.6)]),
+            ("26.22 Гидрология", 26.22, [(4, 1.7), (2, 1.4)]),
+            ("26.23 Метеорология", 26.23, [(5, 2.1), (3, 1.7)]),
+            ("26.30 Геохимия", 26.30, [(6, 2.3), (4, 1.9)]),
+            ("26.31 Минералогия. Петрография", 26.31, [(5, 2.0), (3, 1.6)]),
+            ("26.32 Геодинамика. Геотектоника. Вулканология", 26.32, [(6, 2.4), (4, 1.9)]),
+            ("26.33 Историческая геология", 26.33, [(4, 1.8), (2, 1.5)]),
+            ("26.34 Геологическая разведка. Полезные ископаемые", 26.34, [(5, 2.2), (3, 1.7)]),
+            ("26.35 Гидрогеология", 26.35, [(4, 1.7), (2, 1.4)]),
+            ("26.36 Мерзлотоведение. Инженерная геология", 26.36, [(5, 1.9), (3, 1.6)]),
+            ("26.37 Морская геология", 26.37, [(6, 2.3), (4, 1.8)]),
+            ("26.38 Экологическая геология", 26.38, [(5, 2.1), (3, 1.7)]),
+            ("26.39 Региональная геология", 26.39, [(4, 1.8), (2, 1.5)]),
+            ("26.80 Теоретическая география", 26.80, [(5, 1.9), (3, 1.6)]),
+            ("26.82 Физическая география", 26.82, [(6, 2.2), (4, 1.8)]),
+            ("26.87 Прикладная география", 26.87, [(5, 2.0), (3, 1.7)]),
+            ("26.88 Геоэкология", 26.88, [(4, 1.8), (2, 1.5)]),
+            ("26.89 Страноведение. Краеведение", 26.89, [(3, 1.6), (1, 1.3)]),
+            ("22.12 Основания математики. Математическая логика", 22.12, [(6, 2.2), (4, 1.8), (2, 1.4)]),
+            ("22.21 Теоретическая механика. Аналитическая механика", 22.21, [(5, 2.0), (3, 1.6), (1, 1.2)]),
+            ("22.31 Теоретическая физика", 22.31, [(6, 2.4), (4, 1.9), (2, 1.5)]),
+            ("22.13 Теория чисел", 22.13, [(5, 1.9), (3, 1.5)]),
+            ("22.14 Алгебра", 22.14, [(4, 1.7), (2, 1.3)]),
+            ("22.15 Геометрия. Топология", 22.15, [(5, 1.8), (3, 1.4)]),
+            ("22.16 Математический анализ. Функциональный анализ", 22.16, [(6, 2.1), (4, 1.7)]),
+            ("22.17 Теория вероятностей. Математическая статистика", 22.17, [(5, 1.9), (3, 1.6)]),
+            ("22.18 Математическая кибернетика и дискретная математика", 22.18, [(4, 1.8), (2, 1.5)]),
+            ("22.32 Акустика", 22.32, [(5, 2.0), (3, 1.7)]),
+            ("22.19 Вычислительная математика", 22.19, [(6, 2.2), (4, 1.8)]),
+            ("22.25 Механика сплошных сред", 22.25, [(5, 2.1), (3, 1.7)]),
+            ("22.33 Электричество и магнетизм", 22.33, [(4, 1.9), (2, 1.5)]),
+            ("22.34 Оптика", 22.34, [(5, 2.0), (3, 1.6)]),
+            ("22.35 Физика конденсированного состояния", 22.35, [(6, 2.3), (4, 1.9)]),
+            ("22.36 Молекулярная физика", 22.36, [(5, 1.9), (3, 1.5)]),
+            ("22.37 Физика твердого тела. Кристаллография", 22.37, [(6, 2.4), (4, 2.0)]),
+            ("22.38 Физика атомного ядра и элементарных частиц", 22.38, [(5, 2.2), (3, 1.8)]),
+            ("22.61 Астрометрия", 22.61, [(4, 1.7), (2, 1.4)]),
+            ("22.62 Небесная механика", 22.62, [(5, 1.9), (3, 1.6)]),
+            ("22.63 Астрофизика", 22.63, [(6, 2.5), (4, 2.0)]),
+            ("22.65 Солнечная система", 22.65, [(5, 2.1), (3, 1.7)]),
+            ("22.66 Звезды и межзвездная среда", 22.66, [(4, 1.8), (2, 1.5)]),
+            ("22.67 Звездные системы. Звездная астрономия", 22.67, [(6, 2.3), (4, 1.9)]),
+            ("22.68 Космогония", 22.68, [(5, 2.2), (3, 1.8)]),
+            ("22.6я2 Справочные издания", 22.62, [(3, 1.6), (1, 1.3)]),
+            ("22.6л4 Астрономические и астрофизические обсерватории", 22.64, [(4, 1.7), (2, 1.4)]),
+            ("22.6л9 Планетарии", 22.69, [(3, 1.5), (1, 1.2)]),
+            ("22.6с5 Астрономические приборы", 22.65, [(5, 1.8), (3, 1.5)])
+        ]
 
-        if "28.01 Жизнь. Живые системы" in self.__final_scores:
-            life_keywords = self.getKeySet(28.01)
-            matches = len(self.__doc_words & life_keywords)
-            if matches >= 5:
-                self.__final_scores["28.01 Жизнь. Живые системы"] *= 1.8
-            elif matches >= 3:
-                self.__final_scores["28.01 Жизнь. Живые системы"] *= 1.5
-            elif matches >= 1:
-                self.__final_scores["28.01 Жизнь. Живые системы"] *= 1.2
-
-        if "28.02 Эволюционная биология" in self.__final_scores:
-            evobio_keywords = self.getKeySet(28.02)
-            matches = len(self.__doc_words & evobio_keywords)
-            if matches >= 5:
-                self.__final_scores["28.02 Эволюционная биология"] *= 1.9
-            elif matches >= 3:
-                self.__final_scores["28.02 Эволюционная биология"] *= 1.6
-            elif matches >= 1:
-                self.__final_scores["28.02 Эволюционная биология"] *= 1.3
-
-        if "28.04 Общая генетика" in self.__final_scores:
-            genet_keywords = self.getKeySet(28.04)
-            matches = len(self.__doc_words & genet_keywords)
-            if matches >= 5:
-                self.__final_scores["28.04 Общая генетика"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.04 Общая генетика"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.04 Общая генетика"] *= 1.4
-
-        if "28.05 Общая цитология" in self.__final_scores:
-            cytol_keywords = self.getKeySet(28.05)
-            matches = len(self.__doc_words & cytol_keywords)
-            if matches >= 5:
-                self.__final_scores["28.05 Общая цитология"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.05 Общая цитология"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.05 Общая цитология"] *= 1.4
-
-        if "28.09 Общая систематика организмов" in self.__final_scores:
-            syst_keywords = self.getKeySet(28.09)
-            matches = len(self.__doc_words & syst_keywords)
-            if matches >= 4:
-                self.__final_scores["28.09 Общая систематика организмов"] *= 1.8
-            elif matches >= 2:
-                self.__final_scores["28.09 Общая систематика организмов"] *= 1.5
-
-        if "28.12 Биостратиграфия" in self.__final_scores:
-            biostrat_keywords = self.getKeySet(28.12)
-            matches = len(self.__doc_words & biostrat_keywords)
-            if matches >= 3:
-                self.__final_scores["28.12 Биостратиграфия"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.12 Биостратиграфия"] *= 1.4
-
-        if "28.14 Микропалеонтология" in self.__final_scores:
-            micropal_keywords = self.getKeySet(28.14)
-            matches = len(self.__doc_words & micropal_keywords)
-            if matches >= 3:
-                self.__final_scores["28.14 Микропалеонтология"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.14 Микропалеонтология"] *= 1.4
-
-        if "28.15 Палеоботаника" in self.__final_scores:
-            paleobot_keywords = self.getKeySet(28.15)
-            matches = len(self.__doc_words & paleobot_keywords)
-            if matches >= 3:
-                self.__final_scores["28.15 Палеоботаника"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.15 Палеоботаника"] *= 1.4
-
-        if "28.31 Происхождение вирусов" in self.__final_scores:
-            virus_origin_keywords = self.getKeySet(28.31)
-            matches = len(self.__doc_words & virus_origin_keywords)
-            if matches >= 3:
-                self.__final_scores["28.31 Происхождение вирусов"] *= 1.8
-            elif matches >= 1:
-                self.__final_scores["28.31 Происхождение вирусов"] *= 1.5
-
-        if "28.33 Жизненные циклы вирусов" in self.__final_scores:
-            virus_life_keywords = self.getKeySet(28.33)
-            matches = len(self.__doc_words & virus_life_keywords)
-            if matches >= 4:
-                self.__final_scores["28.33 Жизненные циклы вирусов"] *= 1.9
-            elif matches >= 2:
-                self.__final_scores["28.33 Жизненные циклы вирусов"] *= 1.6
-
-        if "28.34 Генетика вирусов" in self.__final_scores:
-            virus_gen_keywords = self.getKeySet(28.34)
-            matches = len(self.__doc_words & virus_gen_keywords)
-            if matches >= 4:
-                self.__final_scores["28.34 Генетика вирусов"] *= 1.9
-            elif matches >= 2:
-                self.__final_scores["28.34 Генетика вирусов"] *= 1.6
-
-        if "28.36 Морфология вирусов" in self.__final_scores:
-            virus_morph_keywords = self.getKeySet(28.36)
-            matches = len(self.__doc_words & virus_morph_keywords)
-            if matches >= 3:
-                self.__final_scores["28.36 Морфология вирусов"] *= 1.8
-            elif matches >= 1:
-                self.__final_scores["28.36 Морфология вирусов"] *= 1.5
-
-        if "28.43 Биология развития микроорганизмов" in self.__final_scores:
-            microb_dev_keywords = self.getKeySet(28.43)
-            matches = len(self.__doc_words & microb_dev_keywords)
-            if matches >= 4:
-                self.__final_scores["28.43 Биология развития микроорганизмов"] *= 1.8
-            elif matches >= 2:
-                self.__final_scores["28.43 Биология развития микроорганизмов"] *= 1.5
-
-        if "28.46 Морфология микроорганизмов" in self.__final_scores:
-            microb_morph_keywords = self.getKeySet(28.46)
-            matches = len(self.__doc_words & microb_morph_keywords)
-            if matches >= 5:
-                self.__final_scores["28.46 Морфология микроорганизмов"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.46 Морфология микроорганизмов"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.46 Морфология микроорганизмов"] *= 1.4
-
-        if "28.39 Систематика вирусов" in self.__final_scores:
-            virus_syst_keywords = self.getKeySet(28.39)
-            matches = len(self.__doc_words & virus_syst_keywords)
-            if matches >= 4:
-                self.__final_scores["28.39 Систематика вирусов"] *= 1.8
-            elif matches >= 2:
-                self.__final_scores["28.39 Систематика вирусов"] *= 1.5
-
-        if "28.41 Происхождение микроорганизмов" in self.__final_scores:
-            microb_origin_keywords = self.getKeySet(28.41)
-            matches = len(self.__doc_words & microb_origin_keywords)
-            if matches >= 3:
-                self.__final_scores["28.41 Происхождение микроорганизмов"] *= 1.8
-            elif matches >= 1:
-                self.__final_scores["28.41 Происхождение микроорганизмов"] *= 1.5
-
-        if "28.44 Генетика микроорганизмов" in self.__final_scores:
-            microb_gen_keywords = self.getKeySet(28.44)
-            matches = len(self.__doc_words & microb_gen_keywords)
-            if matches >= 5:
-                self.__final_scores["28.44 Генетика микроорганизмов"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.44 Генетика микроорганизмов"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.44 Генетика микроорганизмов"] *= 1.4
-
-        if "28.47 Физико-химическая биология микроорганизмов" in self.__final_scores:
-            microb_phys_keywords = self.getKeySet(28.47)
-            matches = len(self.__doc_words & microb_phys_keywords)
-            if matches >= 5:
-                self.__final_scores["28.47 Физико-химическая биология микроорганизмов"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.47 Физико-химическая биология микроорганизмов"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.47 Физико-химическая биология микроорганизмов"] *= 1.4
-
-        if "28.51 Растения как живые системы" in self.__final_scores:
-            plants_sys_keywords = self.getKeySet(28.51)
-            matches = len(self.__doc_words & plants_sys_keywords)
-            if matches >= 5:
-                self.__final_scores["28.51 Растения как живые системы"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.51 Растения как живые системы"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.51 Растения как живые системы"] *= 1.4
-
-        if "28.52 Эволюционная биология растений" in self.__final_scores:
-            plant_evol_keywords = self.getKeySet(28.52)
-            matches = len(self.__doc_words & plant_evol_keywords)
-            if matches >= 4:
-                self.__final_scores["28.52 Эволюционная биология растений"] *= 1.9
-            elif matches >= 2:
-                self.__final_scores["28.52 Эволюционная биология растений"] *= 1.6
-
-        if "28.54 Генетика растений" in self.__final_scores:
-            plant_gen_keywords = self.getKeySet(28.54)
-            matches = len(self.__doc_words & plant_gen_keywords)
-            if matches >= 5:
-                self.__final_scores["28.54 Генетика растений"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.54 Генетика растений"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.54 Генетика растений"] *= 1.4
-
-        if "28.66 Морфология, анатомия и гистология животных" in self.__final_scores:
-            animal_morph_keywords = self.getKeySet(28.66)
-            matches = len(self.__doc_words & animal_morph_keywords)
-            if matches >= 5:
-                self.__final_scores["28.66 Морфология, анатомия и гистология животных"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.66 Морфология, анатомия и гистология животных"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.66 Морфология, анатомия и гистология животных"] *= 1.4
-
-        if "28.69 Систематика животных" in self.__final_scores:
-            animal_syst_keywords = self.getKeySet(28.69)
-            matches = len(self.__doc_words & animal_syst_keywords)
-            if matches >= 4:
-                self.__final_scores["28.69 Систематика животных"] *= 1.9
-            elif matches >= 2:
-                self.__final_scores["28.69 Систематика животных"] *= 1.6
-
-        if "28.68 Экология и география животных" in self.__final_scores:
-            animal_eco_keywords = self.getKeySet(28.68)
-            matches = len(self.__doc_words & animal_eco_keywords)
-            if matches >= 5:
-                self.__final_scores["28.68 Экология и география животных"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.68 Экология и география животных"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.68 Экология и география животных"] *= 1.4
-
-        if "28.59 Систематика растений" in self.__final_scores:
-            plant_syst_keywords = self.getKeySet(28.59)
-            matches = len(self.__doc_words & plant_syst_keywords)
-            if matches >= 4:
-                self.__final_scores["28.59 Систематика растений"] *= 1.9
-            elif matches >= 2:
-                self.__final_scores["28.59 Систематика растений"] *= 1.6
-
-        if "28.64 Генетика животных" in self.__final_scores:
-            animal_gen_keywords = self.getKeySet(28.64)
-            matches = len(self.__doc_words & animal_gen_keywords)
-            if matches >= 5:
-                self.__final_scores["28.64 Генетика животных"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.64 Генетика животных"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.64 Генетика животных"] *= 1.4
-
-        if "28.62 Эволюционная биология животных" in self.__final_scores:
-            animal_evol_keywords = self.getKeySet(28.62)
-            matches = len(self.__doc_words & animal_evol_keywords)
-            if matches >= 5:
-                self.__final_scores["28.62 Эволюционная биология животных"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.62 Эволюционная биология животных"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.62 Эволюционная биология животных"] *= 1.4
-
-        if "28.63 Биология развития животных" in self.__final_scores:
-            animal_dev_keywords = self.getKeySet(28.63)
-            matches = len(self.__doc_words & animal_dev_keywords)
-            if matches >= 5:
-                self.__final_scores["28.63 Биология развития животных"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.63 Биология развития животных"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.63 Биология развития животных"] *= 1.4
-
-        if "28.03 Биология развития" in self.__final_scores:
-            dev_bio_keywords = self.getKeySet(28.03)
-            matches = len(self.__doc_words & dev_bio_keywords)
-            if matches >= 5:
-                self.__final_scores["28.03 Биология развития"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.03 Биология развития"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.03 Биология развития"] *= 1.4
-
-        if "28.65 Цитология животных" in self.__final_scores:
-            animal_cyt_keywords = self.getKeySet(28.65)
-            matches = len(self.__doc_words & animal_cyt_keywords)
-            if matches >= 5:
-                self.__final_scores["28.65 Цитология животных"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.65 Цитология животных"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.65 Цитология животных"] *= 1.4
-
-        if "28.06 Общая морфология" in self.__final_scores:
-            morph_keywords = self.getKeySet(28.06)
-            matches = len(self.__doc_words & morph_keywords)
-            if matches >= 5:
-                self.__final_scores["28.06 Общая морфология"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.06 Общая морфология"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.06 Общая морфология"] *= 1.4
-
-        if "28.07 Физико-химическая биология" in self.__final_scores:
-            physchem_keywords = self.getKeySet(28.07)
-            matches = len(self.__doc_words & physchem_keywords)
-            if matches >= 5:
-                self.__final_scores["28.07 Физико-химическая биология"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.07 Физико-химическая биология"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.07 Физико-химическая биология"] *= 1.4
-
-        if "28.08 Биоэкология" in self.__final_scores:
-            bioeco_keywords = self.getKeySet(28.08)
-            matches = len(self.__doc_words & bioeco_keywords)
-            if matches >= 5:
-                self.__final_scores["28.08 Биоэкология"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.08 Биоэкология"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.08 Биоэкология"] *= 1.4
-
-        if "28.16 Палеозоология" in self.__final_scores:
-            paleozoo_keywords = self.getKeySet(28.16)
-            matches = len(self.__doc_words & paleozoo_keywords)
-            if matches >= 4:
-                self.__final_scores["28.16 Палеозоология"] *= 1.9
-            elif matches >= 2:
-                self.__final_scores["28.16 Палеозоология"] *= 1.6
-
-        if "28.32 Эволюция вирусов" in self.__final_scores:
-            virus_evol_keywords = self.getKeySet(28.32)
-            matches = len(self.__doc_words & virus_evol_keywords)
-            if matches >= 4:
-                self.__final_scores["28.32 Эволюция вирусов"] *= 1.9
-            elif matches >= 2:
-                self.__final_scores["28.32 Эволюция вирусов"] *= 1.6
-
-        if "28.37 Физико-химическая биология вирусов" in self.__final_scores:
-            virus_phys_keywords = self.getKeySet(28.37)
-            matches = len(self.__doc_words & virus_phys_keywords)
-            if matches >= 4:
-                self.__final_scores["28.37 Физико-химическая биология вирусов"] *= 1.9
-            elif matches >= 2:
-                self.__final_scores["28.37 Физико-химическая биология вирусов"] *= 1.6
-
-        if "28.38 Экология вирусов" in self.__final_scores:
-            virus_eco_keywords = self.getKeySet(28.38)
-            matches = len(self.__doc_words & virus_eco_keywords)
-            if matches >= 4:
-                self.__final_scores["28.38 Экология вирусов"] *= 1.9
-            elif matches >= 2:
-                self.__final_scores["28.38 Экология вирусов"] *= 1.6
-
-        if "28.42 Эволюция микроорганизмов" in self.__final_scores:
-            microb_evol_keywords = self.getKeySet(28.42)
-            matches = len(self.__doc_words & microb_evol_keywords)
-            if matches >= 4:
-                self.__final_scores["28.42 Эволюция микроорганизмов"] *= 1.9
-            elif matches >= 2:
-                self.__final_scores["28.42 Эволюция микроорганизмов"] *= 1.6
-
-        if "28.45 Цитология микроорганизмов" in self.__final_scores:
-            microb_cyt_keywords = self.getKeySet(28.45)
-            matches = len(self.__doc_words & microb_cyt_keywords)
-            if matches >= 5:
-                self.__final_scores["28.45 Цитология микроорганизмов"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.45 Цитология микроорганизмов"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.45 Цитология микроорганизмов"] *= 1.4
-
-        if "28.48 Экология микроорганизмов" in self.__final_scores:
-            microb_eco_keywords = self.getKeySet(28.48)
-            matches = len(self.__doc_words & microb_eco_keywords)
-            if matches >= 5:
-                self.__final_scores["28.48 Экология микроорганизмов"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.48 Экология микроорганизмов"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.48 Экология микроорганизмов"] *= 1.4
-
-        if "28.49 Систематика микроорганизмов" in self.__final_scores:
-            microb_syst_keywords = self.getKeySet(28.49)
-            matches = len(self.__doc_words & microb_syst_keywords)
-            if matches >= 4:
-                self.__final_scores["28.49 Систематика микроорганизмов"] *= 1.9
-            elif matches >= 2:
-                self.__final_scores["28.49 Систематика микроорганизмов"] *= 1.6
-
-        if "28.53 Биология развития растений" in self.__final_scores:
-            plant_dev_keywords = self.getKeySet(28.53)
-            matches = len(self.__doc_words & plant_dev_keywords)
-            if matches >= 5:
-                self.__final_scores["28.53 Биология развития растений"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.53 Биология развития растений"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.53 Биология развития растений"] *= 1.4
-
-        if "28.58 Экология растений" in self.__final_scores:
-            plant_eco_keywords = self.getKeySet(28.58)
-            matches = len(self.__doc_words & plant_eco_keywords)
-            if matches >= 5:
-                self.__final_scores["28.58 Экология растений"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.58 Экология растений"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.58 Экология растений"] *= 1.4
-
-        if "28.67 Физиология животных" in self.__final_scores:
-            animal_phys_keywords = self.getKeySet(28.67)
-            matches = len(self.__doc_words & animal_phys_keywords)
-            if matches >= 5:
-                self.__final_scores["28.67 Физиология животных"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.67 Физиология животных"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.67 Физиология животных"] *= 1.4
-
-        if "28.70 Биология человека" in self.__final_scores:
-            human_bio_keywords = self.getKeySet(28.70)
-            matches = len(self.__doc_words & human_bio_keywords)
-            if matches >= 5:
-                self.__final_scores["28.70 Биология человека"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.70 Биология человека"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.70 Биология человека"] *= 1.4
-
-        if "28.71 Антропология" in self.__final_scores:
-            anthrop_keywords = self.getKeySet(28.71)
-            matches = len(self.__doc_words & anthrop_keywords)
-            if matches >= 5:
-                self.__final_scores["28.71 Антропология"] *= 2.0
-            elif matches >= 3:
-                self.__final_scores["28.71 Антропология"] *= 1.7
-            elif matches >= 1:
-                self.__final_scores["28.71 Антропология"] *= 1.4
+        for name, code, thresholds in categories:
+            if name in self.__final_scores:
+                keywords = self.getKeySet(code)
+                self.__cursor.execute(f"""SELECT path FROM index_bbk 
+                    WHERE path::text ~ '^{code}\.\d$' 
+                    AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = {5}""")
+                for row in self.__cursor.fetchall():
+                    keywords = keywords.union(self.getKeySet(row[0]))
+                matches = len(self.__doc_words & keywords)
+                for min_matches, multiplier in sorted(thresholds, reverse=True):
+                    if matches >= min_matches:
+                        self.__final_scores[name] *= multiplier
+                        break
 
     def getfinal_scores(self):
         return self.__final_scores
+
+    def processingTop3(self):
+        categories = [
+            ("28.012 Свойства и критерии живого", 28.012, [(5, 2.0), (3, 1.6), (1, 1.2)]),
+            ("28.013 Формы жизни", 28.013, [(4, 1.8), (2, 1.4)]),
+            ("28.014 Хронобиология", 28.014, [(5, 1.9), (3, 1.5)]),
+            ("28.015 Биосемиотика (семиотика живого)", 28.015, [(6, 2.2), (4, 1.8)]),
+            ("28.018 Происхождение жизни", 28.018, [(5, 2.1), (3, 1.7)]),
+            ("22.122 Теория доказательств и конструктивная математика", 22.122, [(4, 1.7), (2, 1.3)]),
+            ("22.123 Теория моделей", 22.123, [(5, 1.9), (3, 1.5)]),
+            ("22.124 Алгебраическая логика", 22.124, [(4, 1.8), (2, 1.4)]),
+            ("22.126 Теория множеств", 22.126, [(5, 2.0), (3, 1.6)]),
+            ("22.127 Теория алгоритмов и вычислимых (рекурсивных) функций. Конструктивный анализ", 22.127,
+             [(6, 2.3), (4, 1.9)]),
+            ("22.128 Общие алгебраические системы", 22.128, [(4, 1.7), (2, 1.3)]),
+            ("22.130 Арифметика", 22.130, [(3, 1.6), (1, 1.2)]),
+            ("22.131 Элементарная теория чисел", 22.131, [(4, 1.7), (2, 1.4)]),
+            ("28.025 Микроэволюция. Биологический вид и видообразование", 28.025, [(5, 2.0), (3, 1.6)]),
+            ("28.024 Макроэволюция", 28.024, [(6, 2.2), (4, 1.8)]),
+            ("28.045 Генетика клеточных культур", 28.045, [(4, 1.8), (2, 1.5)]),
+            ("22.132 Алгебраическая теория чисел", 22.132, [(5, 1.9), (3, 1.5)]),
+            ("28.027 Адаптации и их эволюционное развитие. Адаптациогенез", 28.027, [(5, 2.1), (3, 1.7)]),
+            ("28.029 Филогенетическая систематика", 28.029, [(4, 1.8), (2, 1.5)]),
+            ("22.134 Диофантовы приближения", 22.134, [(4, 1.7), (2, 1.3)]),
+            ("22.135 Геометрия чисел", 22.135, [(5, 1.9), (3, 1.5)]),
+            ("22.136 Аналитическая теория чисел", 22.136, [(6, 2.2), (4, 1.8)]),
+            ("22.141 Элементарная алгебра", 22.141, [(3, 1.6), (1, 1.2)]),
+            ("22.143 Линейная и полилинейная алгебра. Теория матриц", 22.143, [(4, 1.7), (2, 1.4)]),
+            ("26.110 Геодезические измерения и вычисления", 26.110, [(5, 1.9), (3, 1.6)]),
+            ("26.111 Высшая геодезия", 26.111, [(6, 2.2), (4, 1.8)]),
+            ("28.035 Регенерация, реституция", 28.035, [(4, 1.8), (2, 1.5)]),
+            ("28.037 Эксплантация", 28.037, [(5, 2.0), (3, 1.6)]),
+            ("28.043 Генетика индивидуального развития (феногенетика). Эпигенетика", 28.043, [(6, 2.3), (4, 1.9)]),
+            ("28.031 Цитогенетические основы развития организмов", 28.031, [(5, 2.0), (3, 1.6)]),
+            ("28.040 Молекулярная генетика. Геномика", 28.040, [(6, 2.4), (4, 2.0)]),
+            ("28.041 Цитогенетика", 28.041, [(5, 1.9), (3, 1.5)]),
+            ("28.042 Эволюционная генетика. Сравнительная геномика", 28.042, [(6, 2.3), (4, 1.9)]),
+            ("28.044 Генетика отдельных признаков", 28.044, [(4, 1.8), (2, 1.5)]),
+            ("26.112 Топография", 26.112, [(5, 1.9), (3, 1.6)]),
+            ("26.113 Фототопография. Фотограмметрия. Дистанционное зондирование Земли (ДЗЗ)", 26.113,
+             [(6, 2.2), (4, 1.8)]),
+            ("26.117 Прикладная геодезия. Инженерная геодезия", 26.117, [(5, 2.0), (3, 1.7)]),
+            ("28.046 Генетика популяций", 28.046, [(5, 2.1), (3, 1.7)]),
+            ("26.171 Картоведение", 26.171, [(4, 1.8), (2, 1.5)]),
+            ("26.172 Математическая картография", 26.172, [(5, 1.9), (3, 1.6)]),
+            ("26.176 Картографическая семиотика и оформление картографических произведений (картографический дизайн)",
+             26.176, [(4, 1.7), (2, 1.4)]),
+            ("26.178 Методы изучения картографических изображений", 26.178, [(3, 1.6), (1, 1.2)]),
+            ("26.190 Геоинформационные технологии", 26.190, [(5, 2.0), (3, 1.6)]),
+            ("26.191 Геоинформационные системы (ГИС). Географические информационные системы", 26.191,
+             [(6, 2.3), (4, 1.9)]),
+            ("26.192 Геоинформационное моделирование и прогнозирование. Геоинформационный мониторинг", 26.192,
+             [(5, 2.1), (3, 1.7)]),
+            ("26.197 Прикладная геоинформатика", 26.197, [(4, 1.8), (2, 1.5)]),
+            ("28.056 Межклеточные взаимодействия и клеточные контакты", 28.056, [(5, 2.0), (3, 1.6)]),
+            ("28.072 Общая биохимия", 28.072, [(6, 2.4), (4, 2.0)]),
+            ("28.047 Генетические основания селекции", 28.047, [(5, 2.1), (3, 1.7)]),
+            ("28.050 Клетка в целом", 28.050, [(4, 1.8), (2, 1.5)]),
+            ("28.051 Субклеточные структуры", 28.051, [(5, 2.0), (3, 1.6)]),
+            ("28.055 Внеклеточные образования", 28.055, [(4, 1.7), (2, 1.4)]),
+            ("28.060 Общая морфология", 28.060, [(6, 2.2), (4, 1.8)]),
+            ("28.066 Общая гистология", 28.066, [(5, 1.9), (3, 1.5)]),
+            ("28.070 Квантовая биология. Молекулярная биология", 28.070, [(6, 2.5), (4, 2.1)]),
+            ("28.071 Общая биофизика", 28.071, [(5, 2.0), (3, 1.6)]),
+            ("28.073 Общая физиология", 28.073, [(6, 2.3), (4, 1.9)]),
+            ("26.211 Внутреннее строение Земли", 26.211, [(5, 1.9), (3, 1.5)]),
+            ("26.212 Гравиметрия", 26.212, [(6, 2.2), (4, 1.8)]),
+            ("22.145 Гомологическая алгебра", 22.145, [(4, 1.7), (2, 1.3)]),
+            ("22.146 Дифференциальная и разностная алгебра", 22.146, [(5, 1.9), (3, 1.5)]),
+            ("26.213 Электричество и магнетизм Земли", 26.213, [(5, 2.0), (3, 1.6)]),
+            ("28.074 Общая иммунология", 28.074, [(6, 2.3), (4, 1.9)]),
+            ("22.148 Группы Ли", 22.148, [(4, 1.8), (2, 1.5)]),
+            ("26.215 Геотермия (геотермика)", 26.215, [(5, 1.9), (3, 1.5)]),
+            ("26.217 Сейсмология", 26.217, [(6, 2.4), (4, 2.0)]),
+            ("28.080 Биоэкология", 28.080, [(5, 2.1), (3, 1.7)]),
+            ("26.218 Экологическая геофизика", 26.218, [(4, 1.8), (2, 1.5)]),
+            ("26.219 Региональная геофизика", 26.219, [(3, 1.6), (1, 1.2)]),
+            ("26.220 Природные воды в целом. Гидросфера", 26.220, [(5, 1.9), (3, 1.5)]),
+            ("26.221 Океанология", 26.221, [(6, 2.3), (4, 1.9)]),
+            ("26.222 Гидрология суши", 26.222, [(5, 2.0), (3, 1.6)]),
+            ("28.082 Гидробиология", 28.082, [(4, 1.8), (2, 1.5)]),
+            ("26.230 Метеорологические наблюдения и исследования", 26.230, [(5, 1.9), (3, 1.5)]),
+            ("26.231 Строение атмосферы", 26.231, [(6, 2.2), (4, 1.8)]),
+            ("26.233 Физика атмосферы. Физическая метеорология", 26.233, [(5, 2.0), (3, 1.6)]),
+            ("26.234 Химия атмосферы", 26.234, [(4, 1.8), (2, 1.5)]),
+            ("26.235 Общая (глобальная) циркуляция атмосферы (ОЦА). Синоптическая метеорология", 26.235,
+             [(6, 2.3), (4, 1.9)]),
+            ("26.236 Климатология", 26.236, [(5, 2.1), (3, 1.7)]),
+            ("28.087 Прикладная биология", 28.087, [(4, 1.8), (2, 1.5)]),
+            ("28.088 Охрана живой природы", 28.088, [(3, 1.6), (1, 1.2)]),
+            ("28.089 Космическая биология", 28.089, [(5, 2.0), (3, 1.6)]),
+            ("26.237 Прикладная метеорология и климатология в целом", 26.237, [(4, 1.7), (2, 1.3)]),
+            ("26.238 Экология атмосферы", 26.238, [(5, 1.9), (3, 1.5)]),
+            ("26.239 Региональная метеорология и климатология", 26.239, [(3, 1.6), (1, 1.2)]),
+            ("28.092 Практическая систематика", 28.092, [(4, 1.7), (2, 1.3)]),
+            ("28.102 Эволюционная и сравнительная палеонтология", 28.102, [(5, 2.0), (3, 1.6)]),
+            ("26.301 Химический состав Земли", 26.301, [(6, 2.2), (4, 1.8)]),
+            ("26.302 Геохимия природных процессов", 26.302, [(5, 2.0), (3, 1.6)]),
+            ("26.303 Физическая геохимия", 26.303, [(6, 2.3), (4, 1.9)]),
+            ("26.304 Органическая геохимия", 26.304, [(5, 2.1), (3, 1.7)]),
+            ("28.142 Стратиграфическая микропалеонтология", 28.142, [(4, 1.8), (2, 1.5)]),
+            ("28.144 Бактериальная палеонтология", 28.144, [(5, 2.0), (3, 1.6)]),
+            ("26.305 Миграция химических элементов в Земле", 26.305, [(6, 2.2), (4, 1.8)]),
+            ("28.145 Ископаемая микрофлора", 28.145, [(4, 1.7), (2, 1.3)]),
+            ("28.146 Ископаемая микрофауна", 28.146, [(5, 1.9), (3, 1.5)]),
+            ("28.152 Ископаемые флоры. Стратиграфическая палеоботаника", 28.152, [(6, 2.3), (4, 1.9)]),
+            ("28.162 Ископаемые фауны. Стратиграфическая палеозоология", 28.162, [(5, 2.1), (3, 1.7)]),
+            ("28.159 Систематика ископаемых растений. Частная палеоботаника", 28.159, [(4, 1.8), (2, 1.5)]),
+            ("28.342 Эволюционная генетика вирусов", 28.342, [(6, 2.4), (4, 2.0)]),
+            ("28.344 Генетика отдельных признаков вирусов", 28.344, [(5, 2.0), (3, 1.6)]),
+            ("28.472 Биохимия микроорганизмов", 28.472, [(6, 2.3), (4, 1.9)]),
+            ("26.306 Ядерная геология. Радиогеохимия", 26.306, [(5, 2.1), (3, 1.7)]),
+            ("26.307 Прикладная геохимия", 26.307, [(4, 1.8), (2, 1.5)]),
+            ("26.308 Экологическая геохимия", 26.308, [(5, 2.0), (3, 1.6)]),
+            ("28.380 Экология вирусов", 28.380, [(4, 1.8), (2, 1.5)]),
+            ("28.385 Географическое распространение вирусов", 28.385, [(3, 1.6), (1, 1.2)]),
+            ("26.311 Минералогия", 26.311, [(6, 2.3), (4, 1.9)]),
+            ("26.314 Петрография (петрология)", 26.314, [(5, 2.0), (3, 1.6)]),
+            ("28.451 Субклеточные структуры микроорганизмов", 28.451, [(5, 2.1), (3, 1.7)]),
+            ("28.471 Биофизика микроорганизмов", 28.471, [(6, 2.4), (4, 2.0)]),
+            ("28.370 Молекулярная вирусология", 28.370, [(6, 2.5), (4, 2.1)]),
+            ("28.371 Биофизика вирусов", 28.371, [(5, 2.0), (3, 1.6)]),
+            ("28.373 Физиология вирусов", 28.373, [(6, 2.3), (4, 1.9)]),
+            ("28.394 Вирусы микроорганизмов", 28.394, [(4, 1.8), (2, 1.5)]),
+            ("28.395 Вирусы растений", 28.395, [(5, 2.0), (3, 1.6)]),
+            ("28.396 Вирусы животных и человека", 28.396, [(6, 2.4), (4, 2.0)]),
+            ("28.441 Цитогенетика микроорганизмов", 28.441, [(5, 2.0), (3, 1.6)]),
+            ("28.442 Эволюционная генетика микроорганизмов", 28.442, [(6, 2.3), (4, 1.9)]),
+            ("28.443 Генетика индивидуального развития микроорганизмов", 28.443, [(5, 2.1), (3, 1.7)]),
+            ("28.444 Генетика отдельных признаков микроорганизмов", 28.444, [(4, 1.8), (2, 1.5)]),
+            ("28.445 Генетика микроорганизмов в культуре", 28.445, [(5, 2.0), (3, 1.6)]),
+            ("28.446 Генетика популяций микроорганизмов", 28.446, [(6, 2.2), (4, 1.8)]),
+            ("28.449 Космическая генетика микроорганизмов", 28.449, [(5, 2.1), (3, 1.7)]),
+            ("28.450 Клетка микроорганизмов в целом", 28.450, [(4, 1.8), (2, 1.5)]),
+            ("26.321 Геодинамика", 26.321, [(6, 2.4), (4, 2.0)]),
+            ("26.322 Геотектоника", 26.322, [(5, 2.1), (3, 1.7)]),
+            ("26.324 Вулканология", 26.324, [(6, 2.5), (4, 2.1)]),
+            ("26.331 Геологическое летоисчисление", 26.331, [(5, 2.0), (3, 1.6)]),
+            ("26.332 Стратиграфия", 26.332, [(6, 2.3), (4, 1.9)]),
+            ("28.480 Экология микроорганизмов", 28.480, [(5, 2.0), (3, 1.6)]),
+            ("26.339 Палеогеография", 26.339, [(4, 1.8), (2, 1.5)]),
+            ("26.347 Геологическая разведка", 26.347, [(5, 2.1), (3, 1.7)]),
+            ("26.348 Полезные ископаемые", 26.348, [(6, 2.2), (4, 1.8)]),
+            ("26.361 Мерзлотоведение", 26.361, [(5, 2.0), (3, 1.6)]),
+            ("26.367 Инженерная геология", 26.367, [(4, 1.8), (2, 1.5)]),
+            ("28.487 Прикладная микробиология", 28.487, [(5, 2.1), (3, 1.7)]),
+            ("28.489 Космическая микробиология", 28.489, [(6, 2.4), (4, 2.0)]),
+            ("22.152 Топология", 22.152, [(5, 2.0), (3, 1.6)]),
+            ("28.537 Эксплантация у растений", 28.537, [(4, 1.8), (2, 1.5)]),
+            ("28.492 Предъядерные микроорганизмы (прокариоты)", 28.492, [(5, 2.0), (3, 1.6)]),
+            ("28.531 Цитогенетические основы развития растений", 28.531, [(6, 2.3), (4, 1.9)]),
+            ("28.536 Трансплантация у растений", 28.536, [(5, 2.0), (3, 1.6)]),
+            ("22.161 Математический анализ", 22.161, [(6, 2.4), (4, 2.0)]),
+            ("26.820 Общая физическая география", 26.820, [(5, 2.0), (3, 1.6)]),
+            ("26.821 Ландшафтоведение", 26.821, [(6, 2.2), (4, 1.8)]),
+            ("26.823 Геоморфология", 26.823, [(5, 2.1), (3, 1.7)]),
+            ("26.829 Региональная физическая география", 26.829, [(4, 1.8), (2, 1.5)]),
+            ("24.111 Периодический закон и периодическая система химических элементов Д.И. Менделеева", 24.111,
+             [(6, 2.5), (4, 2.1)]),
+            ("24.112 Экспериментальные методы химического исследования", 24.112, [(5, 2.0), (3, 1.6)]),
+            ("28.585 География растений (ботаническая география, фитогеография). Флористика", 28.585,
+             [(5, 2.1), (3, 1.7)]),
+            ("28.589 Космическая ботаника", 28.589, [(6, 2.4), (4, 2.0)]),
+            ("28.541 Цитогенетика растений", 28.541, [(5, 2.0), (3, 1.6)]),
+            ("28.542 Эволюционная генетика растений", 28.542, [(6, 2.3), (4, 1.9)]),
+            ("28.544 Генетика отдельных признаков растений", 28.544, [(4, 1.8), (2, 1.5)]),
+            ("28.546 Генетика популяции растений", 28.546, [(5, 2.1), (3, 1.7)]),
+            ("28.574 Иммунология растений", 28.574, [(6, 2.2), (4, 1.8)]),
+            ("28.580 Экология растений", 28.580, [(5, 2.0), (3, 1.6)]),
+            ("28.583 Фитопаразитология", 28.583, [(4, 1.8), (2, 1.5)]),
+            ("28.588 Охрана растений", 28.588, [(3, 1.6), (1, 1.2)]),
+            ("28.651 Субклеточные структуры клетки животных", 28.651, [(5, 2.0), (3, 1.6)]),
+            ("24.115 Химические элементы", 24.115, [(6, 2.3), (4, 1.9)]),
+            ("24.116 Неорганические соединения", 24.116, [(5, 2.0), (3, 1.6)]),
+            ("24.117 Неорганические химические реакции. Неорганический синтез", 24.117, [(6, 2.4), (4, 2.0)]),
+            ("24.118 Химические знаки, формулы и уравнения. Стехиометрические расчеты", 24.118, [(4, 1.7), (2, 1.3)]),
+            ("24.131 Общая радиохимия", 24.131, [(5, 2.1), (3, 1.7)]),
+            ("24.132 Естественные радиоактивные элементы, изотопы", 24.132, [(6, 2.3), (4, 1.9)]),
+            ("24.133 Искусственные радиоактивные элементы, изотопы", 24.133, [(5, 2.2), (3, 1.8)]),
+            ("24.137 Прикладная радиохимия в целом", 24.137, [(4, 1.8), (2, 1.5)]),
+            ("24.210 Теоретические основы органической химии", 24.210, [(6, 2.5), (4, 2.1)]),
+            ("22.162 Функциональный анализ", 22.162, [(5, 2.0), (3, 1.6)]),
+            ("28.666 Гистология животных", 28.666, [(5, 2.1), (3, 1.7)]),
+            ("24.211 Теория строения органических соединений", 24.211, [(6, 2.4), (4, 2.0)]),
+            ("28.667 Ультраструктура организмов животных", 28.667, [(5, 2.0), (3, 1.6)]),
+            ("24.212 Свойства органических соединений", 24.212, [(5, 2.0), (3, 1.6)]),
+            ("24.215 Реакционная способность органических соединений", 24.215, [(6, 2.3), (4, 1.9)]),
+            ("24.217 Кинетика и механизм органических реакций", 24.217, [(5, 2.2), (3, 1.8)]),
+            ("28.672 Биохимия животных", 28.672, [(6, 2.4), (4, 2.0)]),
+            ("28.021 История эволюционных идей", 28.021, [(4, 1.8), (2, 1.5)]),
+            ("28.673 Физиология животных", 28.673, [(5, 2.1), (3, 1.7)]),
+            ("28.655 Внеклеточные образования у животных", 28.655, [(4, 1.8), (2, 1.5)]),
+            ("28.660 Морфология и анатомия животных", 28.660, [(6, 2.3), (4, 1.9)]),
+            ("28.669 Морфология, анатомия и гистология отдельных органов животных", 28.669, [(5, 2.0), (3, 1.6)]),
+            ("28.670 Квантовая биология животных. Молекулярная биология животных", 28.670, [(6, 2.5), (4, 2.1)]),
+            ("24.221 Органические реакции", 24.221, [(5, 2.0), (3, 1.6)]),
+            ("24.222 Органический катализ", 24.222, [(6, 2.2), (4, 1.8)]),
+            ("24.231 Непредельные соединения", 24.231, [(5, 1.9), (3, 1.5)]),
+            ("24.232 Отдельные группы органических соединений", 24.232, [(4, 1.8), (2, 1.5)]),
+            ("24.234 Ациклические соединения", 24.234, [(5, 2.0), (3, 1.6)]),
+            ("28.674 Иммунология животных", 28.674, [(6, 2.3), (4, 1.9)]),
+            ("24.235 Изоциклические соединения", 24.235, [(5, 2.0), (3, 1.6)]),
+            ("24.236 Гетероциклические соединения", 24.236, [(6, 2.4), (4, 2.0)]),
+            ("24.237 Элементоорганические соединения", 24.237, [(5, 2.1), (3, 1.7)]),
+            ("28.680 Экология животных", 28.680, [(5, 2.0), (3, 1.6)]),
+            ("24.239 Природные органические соединения", 24.239, [(6, 2.3), (4, 1.9)]),
+            ("24.427 Методы разделения веществ", 24.427, [(5, 1.9), (3, 1.5)]),
+            ("24.433 Физические методы", 24.433, [(6, 2.2), (4, 1.8)]),
+            ("24.434 Химические методы", 24.434, [(5, 2.0), (3, 1.6)]),
+            ("28.685 География животных (зоологическая география, зоогеография). Фаунистика", 28.685,
+             [(5, 2.1), (3, 1.7)]),
+            ("28.689 Космическая зоология", 28.689, [(6, 2.4), (4, 2.0)]),
+            ("28.683 Зоопаразитология", 28.683, [(4, 1.8), (2, 1.5)]),
+            ("28.687 Прикладная зоология", 28.687, [(5, 2.0), (3, 1.6)]),
+            ("28.688 Охрана животных", 28.688, [(3, 1.6), (1, 1.2)]),
+            ("28.691 Беспозвоночные (Invertebrata). Зоология беспозвоночных", 28.691, [(6, 2.3), (4, 1.9)]),
+            ("24.451 Органический элементный анализ", 24.451, [(5, 2.0), (3, 1.6)]),
+            ("24.452 Структурно-групповой анализ", 24.452, [(6, 2.2), (4, 1.8)]),
+            ("24.483 Физические методы газового анализа", 24.483, [(5, 1.9), (3, 1.5)]),
+            ("28.703 Биология развития человека", 28.703, [(6, 2.5), (4, 2.1)]),
+            ("24.484 Химические методы газового анализа", 24.484, [(4, 1.8), (2, 1.5)]),
+            ("24.489 Другие методы газового анализа", 24.489, [(3, 1.6), (1, 1.2)]),
+            ("24.491 Методы анализа по природе частиц", 24.491, [(5, 2.0), (3, 1.6)]),
+            ("24.499 Анализ по другим признакам", 24.499, [(4, 1.7), (2, 1.3)]),
+            ("28.023 Факторы эволюции органического мира", 28.023, [(5, 2.0), (3, 1.6)]),
+            ("28.699 Животные неясного систематического положения", 28.699, [(3, 1.6), (1, 1.2)]),
+            ("28.701 Организм человека как живая система", 28.701, [(6, 2.4), (4, 2.0)]),
+            ("24.511 Теория химической связи", 24.511, [(6, 2.5), (4, 2.1)]),
+            ("28.704 Генетика человека (антропогенетика)", 28.704, [(6, 2.5), (4, 2.1)]),
+            ("24.521 Кристаллохимия", 24.521, [(5, 2.1), (3, 1.7)]),
+            ("22.182 Математическая теория управляющих систем", 22.182, [(4, 1.8), (2, 1.5)]),
+            ("28.705 Цитология человека", 28.705, [(5, 2.0), (3, 1.6)]),
+            ("28.706 Анатомия и гистология человека", 28.706, [(6, 2.3), (4, 1.9)]),
+            ("24.531 Химическая термодинамика", 24.531, [(6, 2.4), (4, 2.0)]),
+            ("24.533 Равновесия", 24.533, [(5, 2.0), (3, 1.6)]),
+            ("24.534 Физико-хихимический анализ", 24.534, [(4, 1.8), (2, 1.5)]),
+            ("24.542 Химическая кинетика", 24.542, [(6, 2.3), (4, 1.9)]),
+            ("28.712 Антропогенез", 28.712, [(5, 2.1), (3, 1.7)]),
+            ("24.543 Горение и взрывы", 24.543, [(5, 2.2), (3, 1.8)]),
+            ("24.544 Катализ", 24.544, [(6, 2.4), (4, 2.0)]),
+            ("28.716 Морфология человека (антропоморфология)", 28.716, [(5, 2.0), (3, 1.6)]),
+            ("24.552 Фотохимия", 24.552, [(5, 2.1), (3, 1.7)]),
+            ("24.553 Радиационная химия", 24.553, [(6, 2.5), (4, 2.1)]),
+            ("24.555 Ядерная химия", 24.555, [(6, 2.5), (4, 2.1)]),
+            ("28.718 Этническая антропология", 28.718, [(4, 1.8), (2, 1.5)]),
+            ("24.561 Теория растворов", 24.561, [(5, 2.0), (3, 1.6)]),
+            ("24.562 Жидкие растворы", 24.562, [(4, 1.8), (2, 1.5)]),
+            ("24.571 Основы электрохимии", 24.571, [(6, 2.3), (4, 1.9)]),
+            ("24.573 Электрохимические системы", 24.573, [(5, 2.1), (3, 1.7)]),
+            ("24.575 Электролиз", 24.575, [(4, 1.8), (2, 1.5)]),
+            ("24.581 Теория поверхностных явлений", 24.581, [(5, 2.0), (3, 1.6)]),
+            ("24.583 Адсорбция", 24.583, [(6, 2.2), (4, 1.8)]),
+            ("24.591 Механохимия", 24.591, [(5, 2.1), (3, 1.7)]),
+            ("24.594 Магнетохимия", 24.594, [(6, 2.3), (4, 1.9)]),
+            ("24.597 Плазмохимия", 24.597, [(6, 2.5), (4, 2.1)]),
+            ("24.522 Химия кристаллического состояния", 24.522, [(5, 2.0), (3, 1.6)]),
+            ("24.523 Химия аморфных тел", 24.523, [(4, 1.8), (2, 1.5)]),
+            ("24.524 Химия полупроводников", 24.524, [(6, 2.4), (4, 2.0)]),
+            ("24.532 Термохимия", 24.532, [(5, 2.1), (3, 1.7)]),
+            ("24.545 Ингибиторы и промоторы", 24.545, [(4, 1.8), (2, 1.5)]),
+            ("24.572 Электропроводность растворов", 24.572, [(5, 2.0), (3, 1.6)]),
+            ("24.574 Двойной электрический слой", 24.574, [(6, 2.2), (4, 1.8)]),
+            ("24.589 Другие поверхностные явления", 24.589, [(3, 1.6), (1, 1.2)]),
+            ("28.547 Генетические основы селекции растений", 28.547, [(5, 2.1), (3, 1.7)]),
+            ("28.590 Споровые (Sporophyta)", 28.590, [(4, 1.8), (2, 1.5)]),
+            ("28.592 Высшие растения (Embryophyta)", 28.592, [(5, 2.0), (3, 1.6)]),
+            ("24.593 Химия температур", 24.593, [(6, 2.3), (4, 1.9)]),
+            ("24.595 Химическая радиофизика", 24.595, [(5, 2.2), (3, 1.8)]),
+            ("24.596 Химия в экстремальных полях", 24.596, [(6, 2.5), (4, 2.1)]),
+            ("24.611 Строение дисперсных систем", 24.611, [(5, 2.0), (3, 1.6)]),
+            ("24.612 Свойства дисперсных систем", 24.612, [(4, 1.8), (2, 1.5)]),
+            ("24.614 Методы получения дисперсных систем", 24.614, [(5, 2.1), (3, 1.7)]),
+            ("24.615 Методы дисперсионного анализа", 24.615, [(6, 2.2), (4, 1.8)]),
+            ("24.616 Устойчивость дисперсных систем", 24.616, [(5, 2.0), (3, 1.6)]),
+            ("28.625 Микроэволюция животных. Биологический вид и видообразование животных", 28.625, [(6, 2.3), (4, 1.9)]),
+            ("28.631 Цитогенетические основы развития животных", 28.631, [(5, 2.1), (3, 1.7)]),
+            ("28.632 Размножение животных", 28.632, [(4, 1.8), (2, 1.5)]),
+            ("24.621 Структурообразование", 24.621, [(5, 2.0), (3, 1.6)]),
+            ("24.622 Структурно-механические свойства", 24.622, [(6, 2.2), (4, 1.8)]),
+            ("24.623 Деформация и разрушение", 24.623, [(5, 2.1), (3, 1.7)]),
+            ("28.638 Уродства у животных. Тератология животных", 28.638, [(4, 1.8), (2, 1.5)]),
+            ("28.618 Происхождение животных", 28.618, [(5, 2.0), (3, 1.6)]),
+            ("28.621 Теория эволюции животных", 28.621, [(6, 2.4), (4, 2.0)]),
+            ("28.624 Макроэволюция животных", 28.624, [(5, 2.1), (3, 1.7)]),
+            ("28.626 Эволюционный прогресс и регресс животных", 28.626, [(6, 2.3), (4, 1.9)]),
+            ("28.634 Постэмбриональное (постнатальное) развитие животных", 28.634, [(5, 2.0), (3, 1.6)]),
+            ("28.635 Регенерация и реституция у животных", 28.635, [(4, 1.8), (2, 1.5)]),
+            ("28.636 Трансплантация у животных", 28.636, [(5, 2.1), (3, 1.7)]),
+            ("28.637 Эксплантация у животных", 28.637, [(4, 1.8), (2, 1.5)]),
+            ("28.640 Молекулярная генетика животных", 28.640, [(6, 2.5), (4, 2.1)]),
+            ("22.211 Статика", 22.211, [(5, 2.0), (3, 1.6)]),
+            ("24.632 Аэрозоли", 24.632, [(4, 1.8), (2, 1.5)]),
+            ("24.641 Растворы ПАВ", 24.641, [(5, 2.0), (3, 1.6)]),
+            ("24.642 Мицеллообразование", 24.642, [(6, 2.2), (4, 1.8)]),
+            ("24.651 Гели", 24.651, [(5, 2.1), (3, 1.7)]),
+            ("28.642 Эволюционная генетика животных", 28.642, [(6, 2.4), (4, 2.0)]),
+            ("24.711 Строение и свойства полимеров", 24.711, [(5, 2.0), (3, 1.6)]),
+            ("24.712 Синтетические полимеры", 24.712, [(6, 2.3), (4, 1.9)]),
+            ("24.713 Природные полимеры", 24.713, [(5, 2.1), (3, 1.7)]),
+            ("24.714 Неорганические полимеры", 24.714, [(6, 2.4), (4, 2.0)]),
+            ("22.251 Механика деформируемых твердых сред", 22.251, [(5, 2.0), (3, 1.6)]),
+            ("24.811 Теория наночастиц", 24.811, [(6, 2.5), (4, 2.1)]),
+            ("24.814 Синтез наночастиц", 24.814, [(5, 2.2), (3, 1.8)]),
+            ("24.815 Нанокластеры", 24.815, [(6, 2.5), (4, 2.1)]),
+            ("24.824 Супрамолекулярные системы", 24.824, [(5, 2.1), (3, 1.7)]),
+            ("24.633 Аэрогели", 24.633, [(4, 1.8), (2, 1.5)]),
+            ("28.026 Эволюционный прогресс и регресс", 28.026, [(5, 2.0), (3, 1.6)]),
+            ("28.032 Размножение (репродукция)", 28.032, [(4, 1.8), (2, 1.5)]),
+            ("28.033 Эмбриональное развитие (эмбриогенез). Эмбриология", 28.033, [(6, 2.3), (4, 1.9)]),
+            ("28.034 Постэмбриональное (постнатальное) развитие", 28.034, [(5, 2.0), (3, 1.6)]),
+            ("28.641 Цитогенетика животных", 28.641, [(5, 2.1), (3, 1.7)]),
+            ("28.643 Генетика индивидуального развития (феногенетика) животных", 28.643, [(6, 2.3), (4, 1.9)]),
+            ("28.645 Генетика клеточных культур животных", 28.645, [(5, 2.0), (3, 1.6)]),
+            ("28.646 Генетика популяций животных", 28.646, [(6, 2.4), (4, 2.0)]),
+            ("28.647 Генетические основы селекции животных", 28.647, [(5, 2.1), (3, 1.7)]),
+            ("24.643 Магнитные коллоиды", 24.643, [(4, 1.8), (2, 1.5)]),
+            ("22.253 Гидроаэромеханика", 22.253, [(5, 2.0), (3, 1.6)]),
+            ("28.036 Трансплантация", 28.036, [(4, 1.8), (2, 1.5)]),
+            ("24.644 Коллоидные растворы полимеров", 24.644, [(5, 2.0), (3, 1.6)]),
+            ("28.038 Уродства. Тератология", 28.038, [(3, 1.6), (1, 1.2)]),
+            ("24.652 Студни", 24.652, [(4, 1.8), (2, 1.5)]),
+            ("24.653 Латексы", 24.653, [(5, 2.0), (3, 1.6)]),
+            ("24.661 Суспензии", 24.661, [(4, 1.8), (2, 1.5)]),
+            ("24.662 Эмульсии", 24.662, [(5, 2.0), (3, 1.6)]),
+            ("24.663 Пены", 24.663, [(4, 1.8), (2, 1.5)]),
+            ("24.664 Порошки", 24.664, [(5, 2.0), (3, 1.6)]),
+            ("24.812 Методы исследования наночастиц", 24.812, [(6, 2.3), (4, 1.9)]),
+            ("24.813 Физико-химические свойства наночастиц", 24.813, [(5, 2.1), (3, 1.7)]),
+            ("24.816 Наноструктуры", 24.816, [(6, 2.5), (4, 2.1)]),
+            ("24.820 Обобщенная координационная химия", 24.820, [(5, 2.0), (3, 1.6)]),
+            ("24.822 Методы исследования супрамол. систем", 24.822, [(4, 1.8), (2, 1.5)]),
+            ("24.825 Самосборка супрамол. систем", 24.825, [(6, 2.4), (4, 2.0)]),
+            ("22.311 Математическая физика", 22.311, [(6, 2.5), (4, 2.1)]),
+            ("22.312 Теория колебаний и волн", 22.312, [(5, 2.0), (3, 1.6)]),
+            ("22.313 Классическая электродинамика. Теория относительности", 22.313, [(6, 2.5), (4, 2.1)]),
+            ("22.133 Диофантовы уравнения. Теория форм", 22.133, [(4, 1.8), (2, 1.5)]),
+            ("22.314 Квантовая (волновая) механика. Нерелятивистская квантовая механика", 22.314, [(6, 2.5), (4, 2.1)]),
+            ("22.137 Трансцендентные числа", 22.137, [(5, 2.0), (3, 1.6)]),
+            ("28.591 Низшие растения (Thallophyta)", 28.591, [(4, 1.8), (2, 1.5)]),
+            ("22.144 Общая алгебра", 22.144, [(5, 2.0), (3, 1.6)]),
+            ("28.083 Паразитология", 28.083, [(5, 2.1), (3, 1.7)]),
+            ("28.085 Биогеография", 28.085, [(4, 1.8), (2, 1.5)]),
+            ("22.147 Алгебраическая геометрия", 22.147, [(6, 2.3), (4, 1.9)]),
+            ("22.315 Квантовая теория поля (теория квантовых полей)", 22.315, [(6, 2.5), (4, 2.1)]),
+            ("22.151 Геометрия", 22.151, [(5, 2.0), (3, 1.6)]),
+            ("22.171 Теория вероятностей", 22.171, [(6, 2.2), (4, 1.8)]),
+            ("28.169 Систематика ископаемых животных. Частная палеозоология", 28.169, [(5, 2.0), (3, 1.6)]),
+            ("22.172 Математическая статистика", 22.172, [(5, 2.0), (3, 1.6)]),
+            ("28.332 Размножение вирусов", 28.332, [(4, 1.8), (2, 1.5)]),
+            ("22.195 Компьютерная математика", 22.195, [(5, 2.0), (3, 1.6)]),
+            ("28.343 Генетика индивидуального развития вирусов", 28.343, [(5, 2.1), (3, 1.7)]),
+            ("28.372 Биохимия вирусов", 28.372, [(6, 2.4), (4, 2.0)]),
+            ("28.392 Вирусы архей и протистов", 28.392, [(4, 1.8), (2, 1.5)]),
+            ("28.440 Молекулярная генетика микроорганизмов", 28.440, [(6, 2.5), (4, 2.1)]),
+            ("28.447 Генетические основы селекции микроорганизмов", 28.447, [(5, 2.1), (3, 1.7)]),
+            ("28.456 Межклеточные взаимодействия у микроорганизмов", 28.456, [(4, 1.8), (2, 1.5)]),
+            ("22.181 Комбинаторный анализ. Теория графов", 22.181, [(5, 2.0), (3, 1.6)]),
+            ("28.473 Физиология микроорганизмов", 28.473, [(6, 2.3), (4, 1.9)]),
+            ("22.184 Математическая теория информации. Теория кодирования", 22.184, [(5, 2.0), (3, 1.6)]),
+            ("22.317 Термодинамика и статистическая физика", 22.317, [(6, 2.5), (4, 2.1)]),
+            ("28.485 Распространение микроорганизмов в природе", 28.485, [(4, 1.8), (2, 1.5)]),
+            ("28.493 Ядерные микроорганизмы (эукариоты)", 28.493, [(5, 2.0), (3, 1.6)]),
+            ("28.532 Размножение (репродукция) растений", 28.532, [(4, 1.8), (2, 1.5)]),
+            ("28.533 Эмбриональное развитие растений. Фитоэмбриология", 28.533, [(5, 2.0), (3, 1.6)]),
+            ("28.534 Постэмбриональное (постнатальное) развитие растений. Возрастные изменения у растений", 28.534, [(4, 1.8), (2, 1.5)]),
+            ("22.192 Численные методы", 22.192, [(5, 2.0), (3, 1.6)]),
+            ("28.535 Регенерация и реституция у растений", 28.535, [(4, 1.8), (2, 1.5)]),
+            ("28.538 Уродства у растений. Тератология растений", 28.538, [(3, 1.6), (1, 1.2)]),
+            ("28.540 Молекулярная генетика растений", 28.540, [(6, 2.4), (4, 2.0)]),
+            ("22.194 Математические таблицы", 22.194, [(3, 1.6), (1, 1.2)]),
+            ("28.543 Генетика индивидуального развития (феногенетика) растений", 28.543, [(5, 2.1), (3, 1.7)]),
+            ("28.545 Генетика клеточных культур растений", 28.545, [(4, 1.8), (2, 1.5)]),
+            ("22.321 Экспериментальные методы и аппаратура", 22.321, [(5, 2.0), (3, 1.6)]),
+            ("22.212 Кинематика", 22.212, [(4, 1.8), (2, 1.5)]),
+            ("22.323 Теория звука", 22.323, [(5, 2.0), (3, 1.6)]),
+            ("28.581 Популяционная биология растений", 28.581, [(5, 2.0), (3, 1.6)]),
+            ("22.213 Динамика", 22.213, [(6, 2.2), (4, 1.8)]),
+            ("22.324 Нелинейная акустика", 22.324, [(5, 2.1), (3, 1.7)]),
+            ("22.326 Физическая акустика", 22.326, [(6, 2.3), (4, 1.9)]),
+            ("22.329 Отдельные диапазоны звуковых частот", 22.329, [(4, 1.8), (2, 1.5)]),
+            ("22.331 Электростатика", 22.331, [(5, 2.0), (3, 1.6)]),
+            ("22.332 Электрический ток", 22.332, [(6, 2.2), (4, 1.8)]),
+            ("22.333 Электронные и ионные явления. Физика плазмы", 22.333, [(6, 2.5), (4, 2.1)]),
+            ("28.587 Прикладная ботаника", 28.587, [(4, 1.8), (2, 1.5)]),
+            ("22.334 Магнетизм", 22.334, [(5, 2.0), (3, 1.6)]),
+            ("22.336 Электромагнитные колебания и волны. Радиофизика", 22.336, [(6, 2.4), (4, 2.0)]),
+            ("22.338 Движение заряженных частиц в электрических и магнитных полях", 22.338, [(5, 2.1), (3, 1.7)]),
+            ("22.341 Экспериментальные методы и аппаратура", 22.341, [(4, 1.8), (2, 1.5)]),
+            ("22.343 Физическая оптика", 22.343, [(6, 2.3), (4, 1.9)]),
+            ("22.344 Оптическая спектроскопия", 22.344, [(5, 2.0), (3, 1.6)]),
+            ("22.345 Физика лазеров", 22.345, [(6, 2.5), (4, 2.1)]),
+            ("22.353 Нанофизика", 22.353, [(6, 2.5), (4, 2.1)]),
+            ("22.352 Физика мягкого конденсированного состояния", 22.352, [(5, 2.0), (3, 1.6)]),
+            ("22.348 Прикладная оптика", 22.348, [(4, 1.8), (2, 1.5)]),
+            ("28.656 Межклеточные взаимодействия и клеточные контакты у животных", 28.656, [(5, 2.0), (3, 1.6)]),
+            ("22.365 Газы и жидкости", 22.365, [(5, 2.0), (3, 1.6)]),
+            ("22.367 Физика высоких и низких давлений", 22.367, [(6, 2.3), (4, 1.9)]),
+            ("22.368 Физика высоких и низких температур", 22.368, [(5, 2.1), (3, 1.7)]),
+            ("22.371 Теории и структура твердых тел", 22.371, [(6, 2.4), (4, 2.0)]),
+            ("22.372 Механические и акустические свойства монокристаллов", 22.372, [(5, 2.0), (3, 1.6)]),
+            ("22.373 Электрические и магнитные свойства твердых тел", 22.373, [(6, 2.5), (4, 2.1)]),
+            ("22.375 Термодинамика твердых тел. Тепловые свойства твердых тел. Кинетические явления (явления переноса) в твердых телах", 22.375, [(5, 2.1), (3, 1.7)]),
+            ("22.374 Оптические свойства твердых тел. Оптические свойства кристаллов. Кристаллооптика", 22.374, [(6, 2.4), (4, 2.0)]),
+            ("28.681 Популяционная биология животных", 28.681, [(5, 2.0), (3, 1.6)]),
+            ("22.379 Физика полупроводников и диэлектриков", 22.379, [(6, 2.5), (4, 2.1)]),
+            ("22.381 Экспериментальные методы и аппаратура", 22.381, [(4, 1.8), (2, 1.5)]),
+            ("22.382 Физика элементарных частиц", 22.382, [(6, 2.5), (4, 2.1)]),
+            ("22.383 Физика атомного ядра (ядерная физика)", 22.383, [(6, 2.5), (4, 2.1)]),
+            ("22.384 Атомная физика", 22.384, [(5, 2.0), (3, 1.6)]),
+            ("28.693 Хордовые (Chordata)", 28.693, [(5, 2.0), (3, 1.6)]),
+            ("22.386 Радиационная физика", 22.386, [(6, 2.5), (4, 2.1)]),
+            ("22.387 Физика космических лучей", 22.387, [(5, 2.1), (3, 1.7)]),
+            ("28.707 Физико-химическая биология человека. Физиология человека. Иммунология человека", 28.707, [(6, 2.5), (4, 2.1)]),
+            ("22.612 Сферическая астрономия", 22.612, [(5, 2.0), (3, 1.6)]),
+            ("28.612 Свойства организма животных как живых систем", 28.612, [(4, 1.8), (2, 1.5)]),
+            ("22.613 Фундаментальная астрометрия", 22.613, [(6, 2.2), (4, 1.8)]),
+            ("22.614 Астрометрические наблюдения", 22.614, [(5, 2.0), (3, 1.6)]),
+            ("22.617 Служба вращения Земли", 22.617, [(4, 1.8), (2, 1.5)]),
+            ("22.618 Летосчисление. Календарь", 22.618, [(3, 1.6), (1, 1.2)]),
+            ("22.616 Время", 22.616, [(4, 1.8), (2, 1.5)]),
+            ("28.614 Временная организация животных. Хронобиология животных", 28.614, [(5, 2.0), (3, 1.6)]),
+            ("22.621 Теоретическая астрономия", 22.621, [(6, 2.3), (4, 1.9)]),
+            ("22.622 Теория возмущенного движения тел Солнечной системы", 22.622, [(5, 2.0), (3, 1.6)]),
+            ("28.623 Факторы эволюции животных", 28.623, [(4, 1.8), (2, 1.5)]),
+            ("22.631 Практическая (наблюдательная) астрофизика", 22.631, [(5, 2.0), (3, 1.6)]),
+            ("22.625 Релятивистская небесная механика", 22.625, [(6, 2.4), (4, 2.0)]),
+            ("22.632 Теоретическая астрофизика", 22.632, [(6, 2.5), (4, 2.1)]),
+            ("22.637 Релятивистская астрофизика и космология", 22.637, [(6, 2.5), (4, 2.1)]),
+            ("22.654 Планеты и спутники. Планетология", 22.654, [(5, 2.0), (3, 1.6)]),
+            ("22.655 Малые тела Солнечной системы", 22.655, [(4, 1.8), (2, 1.5)]),
+            ("22.657 Межпланетная среда", 22.657, [(5, 2.0), (3, 1.6)]),
+            ("28.627 Адаптация животных и их эволюционное развитие", 28.627, [(5, 2.0), (3, 1.6)]),
+            ("22.662 Звезды", 22.662, [(6, 2.3), (4, 1.9)]),
+            ("22.656 Карликовые планеты", 22.656, [(4, 1.8), (2, 1.5)]),
+            ("22.658 Происхождение Солнечной системы", 22.658, [(5, 2.0), (3, 1.6)]),
+            ("28.633 Эмбриональное развитие (эмбриогенез) животных. Эмбриология животных", 28.633, [(6, 2.3), (4, 1.9)]),
+            ("22.676 Звездные скопления и ассоциации", 22.676, [(5, 2.0), (3, 1.6)]),
+            ("22.667 Межзвездная среда", 22.667, [(6, 2.2), (4, 1.8)]),
+            ("22.675 Галактика (Млечный Путь)", 22.675, [(6, 2.3), (4, 1.9)]),
+            ("22.677 Метагалактика. Внегалактическая астрономия", 22.677, [(6, 2.5), (4, 2.1)]),
+            ("28.644 Генетика отдельных признаков животных", 28.644, [(4, 1.8), (2, 1.5)]),
+            ("28.650 Клетка животных в целом", 28.650, [(5, 2.0), (3, 1.6)])
+        ]
+        for name, code, thresholds in categories:
+            if name in self.__final_scores:
+                keywords = self.getKeySet(code)
+                matches = len(self.__doc_words & keywords)
+                for min_matches, multiplier in sorted(thresholds, reverse=True):
+                    if matches >= min_matches:
+                        self.__final_scores[name] *= multiplier
+                        break
