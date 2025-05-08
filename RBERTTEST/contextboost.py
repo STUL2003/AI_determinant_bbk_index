@@ -1,41 +1,42 @@
 import psycopg2
 
-from RBERTTEST.fillBD import connection
 
 
 class ContextBoost:
-    def __init__(self, final_scores, doc_words):
+    def __init__(self, final_scores, doc_words, explicit_keywords):
         self.__final_scores = final_scores
         self.__doc_words = doc_words
+        self.__explicit_keywords = explicit_keywords
         self.__cursor = psycopg2.connect(host="localhost", database="BBK_index", user="postgres", password="Dima2003",
                                          port=5432).cursor()
 
     def getKeySet(self, path):
         self.__cursor.execute(f"SELECT * FROM keywords_bbk WHERE path = '{path}'")
+        print(path)
         keyset = set()
         for row in self.__cursor.fetchall():
             keyset.add(row[1])
-        connection.commit()
         return keyset
 
     def processingTop0(self):
         config = [
-            ("26 Науки о Земле", 26, 3, 5, 1.8, 3, 1.4),
-            ("22 Физико-математические науки", 22, 3, 5, 1.8, 3, 1.4),
-            ("24 Химические науки", 24, 3, 5, 1.8, 3, 1.4),
-            ("28 Биологические науки", 28, 3, 5, 1.8, 3, 1.4)
+            ("22 Физико-математические науки", 22, 5, 1.8, 3, 1.4),
+            ("24 Химические науки", 24, 5, 1.8, 3, 1.4),
+            ("26 Науки о Земле", 26, 5, 2.0, 3, 1.5),
+            ("28 Биологические науки", 28, 5, 1.2, 4, 1.1)
         ]
 
-        for name, code, path_len, th1, mul1, th2, mul2 in config:
+        for name, code, th1, mul1, th2, mul2 in config:
             if name in self.__final_scores:
-                keywords = self.getKeySet(float(code))
-                self.__cursor.execute(f"""SELECT path FROM index_bbk 
-                    WHERE path::text ~ '^{code}\.\d$' 
-                    AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = {path_len}""")
+                keywords = self.getKeySet(code)
+                self.__cursor.execute(rf"""SELECT path FROM index_bbk 
+                    WHERE path::text ~ '{code}' 
+                    AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 3""")
                 for row in self.__cursor.fetchall():
                     keywords = keywords.union(self.getKeySet(row[0]))
 
-                matches = len(self.__doc_words & keywords)
+                matches = len((self.__doc_words | self.__explicit_keywords) & keywords)
+
                 if matches >= th1:
                     self.__final_scores[name] *= mul1
                 elif matches >= th2:
@@ -55,28 +56,29 @@ class ContextBoost:
             ("26.2 Геофизические науки", 26.2, [(5, 2.0), (3, 1.5), (1, 1.2)]),
             ("26.3 Геологические науки", 26.3, [(6, 2.2), (4, 1.7), (2, 1.3)]),
             ("26.8 Географические науки", 26.8, [(5, 1.9), (3, 1.6), (1, 1.1)]),
-            ("22.1 Математика", 22.1, [(5, 1.8), (3, 1.5), (1, 1.2)]),
+            ("22.1 Математика", 22.1, [ (7, 2.2), (5, 1.8), (3, 1.4), (1, 1.1)]),
             ("22.2 Механика", 22.2, [(4, 1.7), (2, 1.4), (1, 1.1)]),
-            ("22.3 Физика", 22.3, [(5, 2.0), (3, 1.6), (1, 1.2)]),
+            ("22.3 Физика", 22.3, [(7, 1.2), (5, 1.1), (3, 1.05)]),
             ("22.6 Астрономия", 22.6, [(6, 2.2), (4, 1.7), (2, 1.3)]),
-            ("24.1 Общая и неорганическая химия", 24.1, [(5, 1.8), (3, 1.5), (1, 1.2)]),
             ("24.2 Органическая химия", 24.2, [(5, 2.0), (3, 1.6), (1, 1.3)]),
-            ("24.4 Аналитическая химия", 24.4, [(4, 1.7), (2, 1.4), (1, 1.1)]),
-            ("24.5 Физическая химия. Химическая физика", 24.5, [(6, 2.2), (4, 1.8), (2, 1.4)]),
-            ("24.6 Коллоидная химия", 24.6, [(3, 1.6), (1, 1.3)]),
             ("24.7 Химия полимеров", 24.7, [(5, 1.9), (3, 1.6), (1, 1.2)]),
-            ("24.8 Нанохимия", 24.8, [(6, 2.4), (4, 1.9), (2, 1.5)])
+            ("24.8 Нанохимия", 24.8, [(6, 2.4), (4, 1.9), (2, 1.5)]),
+            ("24.6 Коллоидная химия", 24.6, [(5, 1.1), (3, 1.0)]),  # Снизить вес
+            ("24.1 Общая и неорганическая химия", 24.1, [(2, 2.5), (1, 2.0)]),  # Увеличить приоритет
+            ("24.4 Аналитическая химия", 24.4, [(3, 1.5)]),
+            ("24.5 Физическая химия", 24.5, [(3, 1.4)])
         ]
 
         for name, code, thresholds in config:
             if name in self.__final_scores:
                 keywords = self.getKeySet(code)
-                self.__cursor.execute(f"""SELECT path FROM index_bbk 
-                    WHERE path::text ~ '^{code}\.\d$' 
-                    AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = {4}""")
+                self.__cursor.execute(rf"""SELECT path FROM index_bbk 
+                WHERE path::text ~ '{code}' 
+                AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 4""")
                 for row in self.__cursor.fetchall():
                     keywords = keywords.union(self.getKeySet(row[0]))
-                matches = len(self.__doc_words & keywords)
+                    print(keywords)
+                matches = len((self.__doc_words | self.__explicit_keywords) & keywords)
                 for th, mul in sorted(thresholds, reverse=True):
                     if matches >= th:
                         self.__final_scores[name] *= mul
@@ -196,14 +198,14 @@ class ContextBoost:
             ("22.12 Основания математики. Математическая логика", 22.12, [(6, 2.2), (4, 1.8), (2, 1.4)]),
             ("22.21 Теоретическая механика. Аналитическая механика", 22.21, [(5, 2.0), (3, 1.6), (1, 1.2)]),
             ("22.31 Теоретическая физика", 22.31, [(6, 2.4), (4, 1.9), (2, 1.5)]),
-            ("22.13 Теория чисел", 22.13, [(5, 1.9), (3, 1.5)]),
+            ("22.13 Теория чисел", 22.13, [(4, 2.1), (2, 1.5)]),
             ("22.14 Алгебра", 22.14, [(4, 1.7), (2, 1.3)]),
             ("22.15 Геометрия. Топология", 22.15, [(5, 1.8), (3, 1.4)]),
-            ("22.16 Математический анализ. Функциональный анализ", 22.16, [(6, 2.1), (4, 1.7)]),
-            ("22.17 Теория вероятностей. Математическая статистика", 22.17, [(5, 1.9), (3, 1.6)]),
-            ("22.18 Математическая кибернетика и дискретная математика", 22.18, [(4, 1.8), (2, 1.5)]),
+            ("22.16 Математический анализ. Функциональный анализ", 22.16, [(4, 2.1), (3, 1.7)]),
+            ("22.17 Теория вероятностей. Математическая статистика", 22.17, [(4, 1.9), (2, 1.6)]),
+            ("22.18 Математическая кибернетика и дискретная математика", 22.18, [(4, 1.3), (2, 1.5)]),
             ("22.32 Акустика", 22.32, [(5, 2.0), (3, 1.7)]),
-            ("22.19 Вычислительная математика", 22.19, [(6, 2.2), (4, 1.8)]),
+            ("22.19 Вычислительная математика", 22.19, [(4, 2.2), (2, 1.8)]),
             ("22.25 Механика сплошных сред", 22.25, [(5, 2.1), (3, 1.7)]),
             ("22.33 Электричество и магнетизм", 22.33, [(4, 1.9), (2, 1.5)]),
             ("22.34 Оптика", 22.34, [(5, 2.0), (3, 1.6)]),
@@ -227,12 +229,12 @@ class ContextBoost:
         for name, code, thresholds in categories:
             if name in self.__final_scores:
                 keywords = self.getKeySet(code)
-                self.__cursor.execute(f"""SELECT path FROM index_bbk 
-                    WHERE path::text ~ '^{code}\.\d$' 
-                    AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = {5}""")
+                self.__cursor.execute(rf"""SELECT path FROM index_bbk 
+                    WHERE path::text ~ '{code}' 
+                    AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 5""")
                 for row in self.__cursor.fetchall():
                     keywords = keywords.union(self.getKeySet(row[0]))
-                matches = len(self.__doc_words & keywords)
+                matches = len((self.__doc_words | self.__explicit_keywords) & keywords)
                 for min_matches, multiplier in sorted(thresholds, reverse=True):
                     if matches >= min_matches:
                         self.__final_scores[name] *= multiplier
@@ -686,7 +688,7 @@ class ContextBoost:
         for name, code, thresholds in categories:
             if name in self.__final_scores:
                 keywords = self.getKeySet(code)
-                matches = len(self.__doc_words & keywords)
+                matches = len((self.__doc_words | self.__explicit_keywords) & keywords)
                 for min_matches, multiplier in sorted(thresholds, reverse=True):
                     if matches >= min_matches:
                         self.__final_scores[name] *= multiplier

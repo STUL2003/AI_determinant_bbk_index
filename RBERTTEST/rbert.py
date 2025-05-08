@@ -14,23 +14,20 @@ from sklearn.base import BaseEstimator, RegressorMixin
 import warnings
 
 class BertWithAttention(nn.Module):
-    """BERT модель с механизмом внимания для чанков"""
-
     def __init__(self, model_name: str):
         super().__init__()
         self.bert = AutoModel.from_pretrained(model_name)
-        self.attention = nn.Linear(self.bert.config.hidden_size, 1)
-
-    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
-        # Убираем token_type_ids явно
-        outputs = self.bert(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=None
+        self.attention = nn.Sequential(
+            nn.Linear(self.bert.config.hidden_size, 256),
+            nn.Tanh(),
+            nn.Linear(256, 1)
         )
-        embeddings = outputs.last_hidden_state
-        weights = torch.softmax(self.attention(embeddings), dim=1)
-        return torch.sum(weights * embeddings, dim=1)
+
+    def forward(self, input_ids, attention_mask):
+        outputs = self.bert(input_ids, attention_mask, return_dict=True)
+        hidden_states = outputs.last_hidden_state
+        weights = torch.softmax(self.attention(hidden_states).squeeze(-1), dim=1)
+        return torch.sum(weights.unsqueeze(-1) * hidden_states, dim=1)
 
 
 class DocumentProcessor(BaseEstimator, RegressorMixin):
@@ -40,8 +37,8 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
             stopwords_file= "stopwords-ru.txt",
             max_seq_length = 512,
             chunk_overlap = 64,
-            bert_weight = 0.7,
-            keyword_weight = 0.3,
+            bert_weight = 0.5,
+            keyword_weight = 0.5,
             relative_threshold = 0.7,
             absolute_threshold = 0.2,
             use_attention = True,
@@ -176,6 +173,23 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
         except Exception as e:
             return []
 
+    def extract_keywords(self, text):
+
+        keywords = []
+        patterns = [
+            r"(?:КЛЮЧЕВЫЕ СЛОВА|Ключевые слова|Keywords)[:\s]*([^.]+)",
+            r"Keywords:[ ]*(.+?)(?=\n|\.)",
+            r"[К|к]лючевые слова[:\s]*([^.;]+)"
+        ]
+
+        for pattern in patterns:
+            matches = re.findall(pattern, text, flags=re.IGNORECASE)
+            for match in matches:
+                cleaned =re.sub(r'[^a-zA-Zа-яА-ЯёЁ0-9\-—.,]', ' ', match)
+                keywords.extend([word.strip().lower() for word in cleaned.split(',') if word.strip()])
+
+        return list(set(keywords))
+
     @lru_cache(maxsize=100)
     def get_embedding(self, text):
         chunks = self.tokenize_and_chunk(text)
@@ -233,12 +247,16 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
     def jaccard_tfidf(self, doc_words, topic_words):
         if not doc_words or not topic_words or not self.tfidf_fitted:
             return 0.0
-
         try:
             common = doc_words & topic_words
             union = doc_words | topic_words
-            numerator = sum(self._get_tfidf_weight(w) for w in common)
+            keyword_boost = 2.0
+
+            numerator = sum(self._get_tfidf_weight(w) * (keyword_boost if w in self.explicit_keywords_set else 1)
+                            for w in common)
+
             denominator = sum(self._get_tfidf_weight(w) for w in union)
+
             return numerator / denominator if denominator else 0.0
         except Exception as e:
             return 0.0
@@ -251,8 +269,12 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
                 text = self.extract_text(pdf_path)
 
             clean_text = self.preprocess_text(text)
-            doc_embedding = self.get_embedding(clean_text)
-            doc_words = set(clean_text.split())
+            explicit_keywords = self.extract_keywords(text)
+            enhanced_text = clean_text + " " + " ".join(explicit_keywords * 3)
+
+            doc_embedding = self.get_embedding(enhanced_text)
+            doc_words = set(enhanced_text.split())
+            self.explicit_keywords_set = set(explicit_keywords)
             if not hasattr(self, 'tfidf_fitted'):
                 self._fit_tfidf([clean_text] + list(self.reference_topics.values()))
 
@@ -276,7 +298,7 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
             }
 
             if final_scores:
-                 cb = contextboost.ContextBoost(final_scores, doc_words)
+                 cb = contextboost.ContextBoost(final_scores, doc_words, self.explicit_keywords_set)
                  if self.top== 0:
                      cb.processingTop0()
                  elif self.top == 1:
@@ -295,12 +317,12 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
                 self.recursive_scores = self.analyze_document(text=text)
                 if self.top ==  3:
                     with open("res.txt", "a", encoding="utf-8") as f:
-                        f.write("\n".join([f"{k}: {v:.4f}" for k, v in sorted(self._normalize_scores(final_scores).items(), key=lambda item: item[1], reverse=True)[:2]]) + "\n\n")
+                        f.write("\n".join([f"{k}: {v:.4f}" for k, v in sorted(self._normalize_scores(final_scores).items(), key=lambda item: item[1], reverse=True)[:4]]) + "\n\n")
                 else:
                     with open("res.txt", "a", encoding="utf-8") as f:
                         f.write("\n".join([f"{k}: {v:.4f}" for k, v in
                                            sorted(self._normalize_scores(final_scores).items(),
-                                                  key=lambda item: item[1], reverse=True)[:1]]) + "\n\n")
+                                                  key=lambda item: item[1], reverse=True)[:4]]) + "\n\n")
                 self.top -= 1
 
                 return
@@ -321,7 +343,7 @@ def main():
     try:
         processor = DocumentProcessor()
         with open('res.txt', 'w') as f:f.write('')
-        processor.analyze_document("books\\24.1.pdf")
+        processor.analyze_document("books\\28.69.pdf")
 
     except Exception as e:
         print(e)
