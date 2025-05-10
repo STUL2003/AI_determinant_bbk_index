@@ -33,7 +33,8 @@ class BertWithAttention(nn.Module):
 class DocumentProcessor(BaseEstimator, RegressorMixin):
     def __init__(
             self,
-            model_name = "DeepPavlov/rubert-base-cased-sentence",
+            #model_name = "DeepPavlov/rubert-base-cased-sentence",
+            model_name="C:\\AI_determinant_bbk_index\\RBERTTEST\\hierarchical_bbk_model\\final_model",
             stopwords_file= "stopwords-ru.txt",
             max_seq_length = 512,
             chunk_overlap = 64,
@@ -343,7 +344,7 @@ def main():
     try:
         processor = DocumentProcessor()
         with open('res.txt', 'w') as f:f.write('')
-        processor.analyze_document("books\\28.69.pdf")
+        processor.analyze_document("books\\28.70.pdf")
 
     except Exception as e:
         print(e)
