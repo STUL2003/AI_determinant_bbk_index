@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Uploader</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <h1>AI BBK</h1>
+    <div class="container">
+        <div class="analyze">
+            <form action="/files" method="post" enctype="multipart/form-data">
+                <div class="form-group">
+                    <input type="file" name="upload_file" id="file" accept="application/pdf" required>
+                    <label for="file">Выберите файл</label>
+                    <span id="file-name"></span>
+                </div>
+            </form>
+            <div class="info">
+                <div class="book"></div>
+                <div class="bbk_list"></div>
+            </div>
+            <button name="classif" type="submit">Классифицировать</button>
+        </div>
+        <div class="checkinfo">
+            <button type="submit">Просмотреть ключевые термины</button>
+            <button type="submit">Просмотреть все индексы с весами</button>
+            <button type="submit">Отправить данные</button>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('file').addEventListener('change', function(e) {
+            const fileName = e.target.files[0].name;
+            document.getElementById('file-name').textContent = fileName;
+        });
+    </script>
+</body>
+</html>

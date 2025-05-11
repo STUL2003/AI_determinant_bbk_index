@@ -33,8 +33,8 @@ class BertWithAttention(nn.Module):
 class DocumentProcessor(BaseEstimator, RegressorMixin):
     def __init__(
             self,
-            #model_name = "DeepPavlov/rubert-base-cased-sentence",
-            model_name="C:\\AI_determinant_bbk_index\\RBERTTEST\\hierarchical_bbk_model\\final_model",
+            model_name = "DeepPavlov/rubert-base-cased-sentence",
+            #model_name="C:\\AI_determinant_bbk_index\\RBERTTEST\\hierarchical_bbk_model\\final_model",
             stopwords_file= "stopwords-ru.txt",
             max_seq_length = 512,
             chunk_overlap = 64,

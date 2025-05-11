@@ -1,0 +1,116 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    background-color: #181919;
+    min-height: 100vh;
+    height: 100vh;
+    overflow: hidden;
+}
+.container {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    height: calc(100vh - 80px);
+    max-width: 1200px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 40px 30px 30px;
+    box-sizing: border-box;
+}
+.info {
+    display: flex;
+    justify-content: space-between;
+    gap: 30px;
+    height: 400px;
+    margin: 20px 0;
+}
+.book, .bbk_list {
+    flex: 1;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    border: 2px dashed SlateBlue;
+    max-width: calc(50% - 15px);
+}
+.checkinfo {
+    flex: 0 0 300px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    background: #252727;
+    padding: 30px;
+    border-radius: 5px;
+    height: 100%;
+}
+button, label[for="file"] {
+    background: SlateBlue;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    text-align: center;
+    display: inline-block;
+}
+button:hover, label[for="file"]:hover {
+    background: #483D8B;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+}
+button:active, label[for="file"]:active {
+    transform: translateY(1px);
+    box-shadow: none;
+}
+button[name="classif"] {
+    width: 100%;
+    margin-top: auto;
+    height: 60px;
+    font-size: 16px;
+}
+.checkinfo button {
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+h1 {
+    color: SlateBlue;
+    text-align: center;
+    margin: 10px 0;
+}
+
+#file-name {
+    color: SlateBlue;
+    font-size: 14px;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.form-group {
+    position: absolute;
+    top: 5px;
+    left: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+}
+
+input[type="file"] {
+    display: none;
+}
+
+.analyze {
+    position: relative;
+    flex: 1 1 60%;
+    background: #252727;
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
