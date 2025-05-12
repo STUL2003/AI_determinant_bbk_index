@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import uvicorn
+import RBERTTEST.ml.rbert
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")# подключение цсс из папки

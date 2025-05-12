@@ -7,11 +7,15 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import normalize
 from functools import lru_cache
 import psycopg2
-import contextboost
+import RBERTTEST.ml.contextboost
 from sklearn.feature_extraction.text import TfidfVectorizer
 from torch import nn
 from sklearn.base import BaseEstimator, RegressorMixin
 import warnings
+import logging
+import os
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+logging.getLogger("pdfplumber").setLevel(logging.ERROR)
 
 class BertWithAttention(nn.Module):
     def __init__(self, model_name: str):
@@ -340,15 +344,15 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
         total = sum(scores.values())
         return {k: v / total for k, v in scores.items()} if total else {}
 
-def main():
-    try:
-        processor = DocumentProcessor()
-        with open('res.txt', 'w') as f:f.write('')
-        processor.analyze_document("books\\28.70.pdf")
-
-    except Exception as e:
-        print(e)
-
-
-if __name__ == "__main__":
-    main()
+# def main():
+#     try:
+#         processor = DocumentProcessor()
+#         with open('res.txt', 'w') as f:f.write('')
+#         processor.analyze_document("books\\26.111.pdf")
+#
+#     except Exception as e:
+#         print(e)
+#
+#
+# if __name__ == "__main__":
+#     main()
