@@ -12,7 +12,6 @@ class ContextBoost:
 
     def getKeySet(self, path):
         self.__cursor.execute(f"SELECT * FROM keywords_bbk WHERE path = '{path}'")
-        print(path)
         keyset = set()
         for row in self.__cursor.fetchall():
             keyset.add(row[1])
