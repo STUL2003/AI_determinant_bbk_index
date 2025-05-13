@@ -7,7 +7,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import normalize
 from functools import lru_cache
 import psycopg2
-import RBERTTEST.ml.contextboost
+import RBERTTEST.ml.contextboost as contextboost
 from sklearn.feature_extraction.text import TfidfVectorizer
 from torch import nn
 from sklearn.base import BaseEstimator, RegressorMixin
@@ -127,19 +127,7 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
             if 'connection' in locals():
                 connection.close()
 
-    def extract_text(self, pdf_path, start_page= 0):
-        """Извлечение текста из PDF с обработкой ошибок"""
-        try:
-            with pdfplumber.open(pdf_path) as pdf:
-                text_pages = []
-                for i, page in enumerate(pdf.pages[start_page:], start=start_page):
-                    text = page.extract_text()
-                    if text:
-                        text_pages.append(text)
-                result = " ".join(text_pages) if text_pages else ""
-                return result
-        except Exception as e:
-            return ""
+
 
     def preprocess_text(self, text):
         try:
@@ -266,12 +254,12 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
         except Exception as e:
             return 0.0
 
-    def analyze_document(self,  pdf_path = None, text = None):
+    def analyze_document(self, text = None):
+        with open('res.txt', 'w') as f:
+            f.write('')
         try:
             if text is None:
-                if pdf_path is None:
                     raise ValueError()
-                text = self.extract_text(pdf_path)
 
             clean_text = self.preprocess_text(text)
             explicit_keywords = self.extract_keywords(text)
@@ -321,20 +309,20 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
                 self.reference_topics = self._load_reference_topics(our_index)
                 self.recursive_scores = self.analyze_document(text=text)
                 if self.top ==  3:
-                    with open("res.txt", "a", encoding="utf-8") as f:
-                        f.write("\n".join([f"{k}: {v:.4f}" for k, v in sorted(self._normalize_scores(final_scores).items(), key=lambda item: item[1], reverse=True)[:4]]) + "\n\n")
+                    with open("..\\web\\res.txt", "a", encoding="utf-8") as f:
+                        f.write("<br>".join([f"{k}: {v:.4f}" for k, v in sorted(self._normalize_scores(final_scores).items(), key=lambda item: item[1], reverse=True)[:4]]) + "<br><br>")
                 else:
-                    with open("res.txt", "a", encoding="utf-8") as f:
-                        f.write("\n".join([f"{k}: {v:.4f}" for k, v in
+                    with open("..\\web\\res.txt", "a", encoding="utf-8") as f:
+                        f.write("<br>".join([f"{k}: {v:.4f}" for k, v in
                                            sorted(self._normalize_scores(final_scores).items(),
-                                                  key=lambda item: item[1], reverse=True)[:4]]) + "\n\n")
+                                                  key=lambda item: item[1], reverse=True)[:4]]) + "<br><br>")
                 self.top -= 1
 
                 return
-            with open("res.txt", "a", encoding="utf-8") as f:
-                f.write("\n".join([f"{k}: {v:.4f}" for k, v in
+            with open("RBERTTEST\\web\\res.txt", "a", encoding="utf-8") as f:
+                f.write("<br>".join([f"{k}: {v:.4f}" for k, v in
                                    sorted(self._normalize_scores(final_scores).items(), key=lambda item: item[1],
-                                          reverse=True)[:4]]) + "\n\n")
+                                          reverse=True)[:4]]) + "<br><br>")
             return
 
         except Exception as e:

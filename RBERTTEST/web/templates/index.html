@@ -16,12 +16,11 @@
                     <label for="file">Выберите файл</label>
                     <span id="file-name"></span>
                 </div>
-            </form>
-            <div class="info">
-                <div class="book"></div>
-                <div class="bbk_list"></div>
-            </div>
-            <form action="/classificators" method="post" id="analyze-form">
+
+                <div class="info">
+                    <div class="book">{{ book_text }}</div>
+                    <div class="bbk_list"> {{ res_text|safe }}</div>
+                </div>
                 <button type="submit" name="action" value="analyze">Классифицировать</button>
             </form>
         </div>
