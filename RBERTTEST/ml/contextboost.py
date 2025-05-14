@@ -11,8 +11,8 @@ class ContextBoost:
         self.__explicit_keywords = explicit_keywords
         self.__cursor = psycopg2.connect(host="localhost", database="BBK_index", user="postgres", password="Dima2003",
                                          port=5432).cursor()
-        self.__model_path = hf_hub_download(repo_id="facebook/fasttext-ru-vectors", filename="model.bin")
-        self.__model = fasttext.load_model(self.__model_path)
+        #self.__model_path = hf_hub_download(repo_id="facebook/fasttext-ru-vectors", filename="model.bin")
+        self.__model = fasttext.load_model("model.bin")
         self.__similarity_threshold = 0.6
 
     def getKeySet(self, path):
@@ -70,7 +70,7 @@ class ContextBoost:
                     AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 3""")
                 for row in self.__cursor.fetchall():
                     keywords = keywords.union(self.getKeySet(row[0]))
-
+                print(keywords)
                 topic_vectors = []
                 for keyword in keywords:
                     vec = self.__model.get_word_vector(keyword)
