@@ -11,6 +11,8 @@ from torch import nn
 from sklearn.base import BaseEstimator, RegressorMixin
 import logging
 import os
+import fasttext
+from huggingface_hub import hf_hub_download
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 logging.getLogger("pdfplumber").setLevel(logging.ERROR)
 

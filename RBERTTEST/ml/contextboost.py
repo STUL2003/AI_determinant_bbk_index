@@ -1,5 +1,7 @@
 import psycopg2
-
+import fasttext
+from huggingface_hub import hf_hub_download
+import numpy as np
 
 
 class ContextBoost:
@@ -9,6 +11,9 @@ class ContextBoost:
         self.__explicit_keywords = explicit_keywords
         self.__cursor = psycopg2.connect(host="localhost", database="BBK_index", user="postgres", password="Dima2003",
                                          port=5432).cursor()
+        self.__model_path = hf_hub_download(repo_id="facebook/fasttext-ru-vectors", filename="model.bin")
+        self.__model = fasttext.load_model(self.__model_path)
+        self.__similarity_threshold = 0.6
 
     def getKeySet(self, path):
         self.__cursor.execute(f"SELECT * FROM keywords_bbk WHERE path = '{path}'")
@@ -16,6 +21,38 @@ class ContextBoost:
         for row in self.__cursor.fetchall():
             keyset.add(row[1])
         return keyset
+
+    def intersection(self, keywords, name, thresholds):
+        topic_vectors = []
+        for keyword in keywords:
+            vec = self.__model.get_word_vector(keyword)
+            if vec is not None and np.any(vec):
+                topic_vectors.append(vec)
+
+        # Подготовка матрицы терминов темы
+        topic_matrix = np.array(topic_vectors)
+        topic_matrix_norm = topic_matrix / np.linalg.norm(topic_matrix, axis=1, keepdims=True)
+
+        # Вычисление семантических совпадений
+        matches = 0
+        all_doc_words = self.__doc_words.union(self.__explicit_keywords)
+
+        for word in all_doc_words:
+            word_vec = self.__model.get_word_vector(word)
+            if word_vec is None:
+                continue
+
+            word_vec_norm = word_vec / np.linalg.norm(word_vec)
+            similarities = np.dot(topic_matrix_norm, word_vec_norm)
+
+            if np.max(similarities) >= self.__similarity_threshold:
+                matches += 1
+
+        # Применение пороговых множителей
+        for th, mul in sorted(thresholds, key=lambda x: x[0], reverse=True):
+            if matches >= th:
+                self.__final_scores[name] *= mul
+                break
 
     def processingTop0(self):
         config = [
@@ -34,8 +71,33 @@ class ContextBoost:
                 for row in self.__cursor.fetchall():
                     keywords = keywords.union(self.getKeySet(row[0]))
 
-                matches = len((self.__doc_words | self.__explicit_keywords) & keywords)
+                topic_vectors = []
+                for keyword in keywords:
+                    vec = self.__model.get_word_vector(keyword)
+                    if vec is not None and np.any(vec):
+                        topic_vectors.append(vec)
 
+                if not topic_vectors:
+                    continue
+
+
+                topic_matrix = np.array(topic_vectors) # Нормализация векторов темы
+                topic_matrix_norm = topic_matrix / np.linalg.norm(topic_matrix, axis=1, keepdims=True)
+
+
+                matches = 0
+                all_doc_words = self.__doc_words.union(self.__explicit_keywords) # Вычисление совпадений
+
+                for word in all_doc_words:
+                    word_vec = self.__model.get_word_vector(word)
+                    if word_vec is None:
+                        continue
+
+                    word_vec_norm = word_vec / np.linalg.norm(word_vec)
+                    similarities = np.dot(topic_matrix_norm, word_vec_norm)
+
+                    if np.max(similarities) >= self.__similarity_threshold:
+                        matches += 1
                 if matches >= th1:
                     self.__final_scores[name] *= mul1
                 elif matches >= th2:
@@ -77,11 +139,7 @@ class ContextBoost:
                 for row in self.__cursor.fetchall():
                     keywords = keywords.union(self.getKeySet(row[0]))
                     print(keywords)
-                matches = len((self.__doc_words | self.__explicit_keywords) & keywords)
-                for th, mul in sorted(thresholds, reverse=True):
-                    if matches >= th:
-                        self.__final_scores[name] *= mul
-                        break
+                self.intersection(keywords, name, thresholds)
 
     def processingTop2(self):
         categories = [
@@ -233,11 +291,7 @@ class ContextBoost:
                     AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 5""")
                 for row in self.__cursor.fetchall():
                     keywords = keywords.union(self.getKeySet(row[0]))
-                matches = len((self.__doc_words | self.__explicit_keywords) & keywords)
-                for min_matches, multiplier in sorted(thresholds, reverse=True):
-                    if matches >= min_matches:
-                        self.__final_scores[name] *= multiplier
-                        break
+                    self.intersection(keywords, name, thresholds)
 
     def getfinal_scores(self):
         return self.__final_scores
@@ -687,8 +741,4 @@ class ContextBoost:
         for name, code, thresholds in categories:
             if name in self.__final_scores:
                 keywords = self.getKeySet(code)
-                matches = len((self.__doc_words | self.__explicit_keywords) & keywords)
-                for min_matches, multiplier in sorted(thresholds, reverse=True):
-                    if matches >= min_matches:
-                        self.__final_scores[name] *= multiplier
-                        break
+                self.intersection(keywords, name, thresholds)
