@@ -224,10 +224,9 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
             final_scores = {
                 k: v for k, v in results.items()
             }
-
             #Усиление контекста тем, которые содержат ключевые термины
             if final_scores:
-                 cb = contextboost.ContextBoost(final_scores, doc_words, self.explicit_keywords_set)
+                 cb = contextboost.ContextBoost(final_scores, doc_words, self.explicit_keywords_set, self.tokenizer, self.model, doc_embedding)
                  if self.top== 0:
                      cb.processingTop0()
                  elif self.top == 1:

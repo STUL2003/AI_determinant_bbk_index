@@ -44,6 +44,7 @@ async def classificator(request: Request, upload_file: UploadFile):
         processor = rb.DocumentProcessor()
         book_text = extract_text(save_to)
         processor.analyze_document(book_text)
+        print("Всё")
         res = None
         with open("res.txt", "r",  encoding='utf-8') as f:
             res = f.readlines()
