@@ -49,8 +49,13 @@ class ContextBoost:
         else:
             hidden_states = outputs[0] if isinstance(outputs, tuple) else outputs
         embedding = hidden_states.mean(dim=1).detach().numpy()
-        if embedding.shape != (1, 768):
-            embedding = embedding.reshape(1, -1)[:, :768]
+
+        embedding = embedding.reshape(1, -1)
+        if embedding.shape[1] < 768:
+            pad =np.zeros((1, 768 - embedding.shape[1]))
+            embedding = np.hstack([embedding, pad])
+        elif embedding.shape[1] > 768:
+            embedding = embedding[:, :768]
         return embedding
 
     def intersection(self, keywords, name, thresholds):
@@ -58,10 +63,10 @@ class ContextBoost:
 
         similarities = []
         for term in keywords:
-            # эмбеддинг термина
             term_emb = self._get_embedding(term)
             term_emb = normalize(term_emb.reshape(1, -1))
-
+            if doc_emb.shape[1] != term_emb.shape[1]:
+                raise ValueError(f"Shape mismatch: doc_emb {doc_emb.shape}, term_emb {term_emb.shape}")
             sim = cosine_similarity(doc_emb, term_emb)[0][0]
             similarities.append(sim)
         matches = sum(sim > self.__similarity_threshold for sim in similarities)
@@ -91,7 +96,13 @@ class ContextBoost:
 
                 doc_emb = self.doc_embedding.reshape(1, -1)
                 #keywords = {MorphAnalyzer().parse(term)[0].normal_form for term in keywords}
-                topic_embeddings = np.vstack([self._get_embedding(term) for term in keywords])
+                topic_embeddings = []
+                for term in keywords:
+                    emb = self._get_embedding(term)
+                    if emb.shape[1] != 768:
+                        emb = emb[:, :768]  # Обрезаем до 768, если необходимо
+                    topic_embeddings.append(emb)
+                topic_embeddings = np.vstack(topic_embeddings)
 
                 similarity_matrix = cosine_similarity(doc_emb, topic_embeddings)
                 matches = np.sum(similarity_matrix > self.__similarity_threshold)
@@ -737,7 +748,8 @@ class ContextBoost:
             ("22.667 Межзвездная среда", 22.667, [(6, 2.2), (4, 1.8)]),
             ("22.675 Галактика (Млечный Путь)", 22.675, [(6, 2.3), (4, 1.9)]),
             ("22.677 Метагалактика. Внегалактическая астрономия", 22.677, [(6, 2.5), (4, 2.1)]),
-            ("28.644 Генетика отдельных признаков животных")]
+            ("28.644 Генетика отдельных признаков животных", 28.644, [(4, 1.8), (2, 1.5)])
+        ]
         for name, code, thresholds in categories:
             if name in self.__final_scores:
                 keywords = self.getKeySet(code)
