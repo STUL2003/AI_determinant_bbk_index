@@ -7,7 +7,7 @@ def processingcheck(func):
     def wrapper(*arg, **kwarg):
         try:
             res = func(*arg, **kwarg)
-            return res;
+            return res
         except Exception as e:
             print(e)
     return wrapper
@@ -47,8 +47,11 @@ class ContextBoost:
         if hasattr(outputs, 'last_hidden_state'):
             hidden_states = outputs.last_hidden_state
         else:
-            hidden_states= outputs[0] if isinstance(outputs, tuple) else outputs
-        return hidden_states.mean(dim=1).detach().numpy().reshape(1, -1)
+            hidden_states = outputs[0] if isinstance(outputs, tuple) else outputs
+        embedding = hidden_states.mean(dim=1).detach().numpy()
+        if embedding.shape != (1, 768):
+            embedding = embedding.reshape(1, -1)[:, :768]
+        return embedding
 
     def intersection(self, keywords, name, thresholds):
         doc_emb = normalize(self.doc_embedding.reshape(1, -1))
@@ -68,7 +71,6 @@ class ContextBoost:
                 self.__final_scores[name] *= mul
                 break
 
-    @processingcheck
     @processingcheck
     def processingTop0(self):
         config = [
