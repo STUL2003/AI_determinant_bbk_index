@@ -6,6 +6,9 @@ import uvicorn
 import pdfplumber
 from pathlib import Path
 import RBERTTEST.ml.rbert as rb
+import tempfile
+from fastapi.responses import PlainTextResponse
+import os
 
 UPLOAD_DIR = Path() / 'uploads'
 
@@ -27,6 +30,21 @@ def extract_text( pdf_path, start_page=0):
             return result
     except Exception as e:
         return ""
+
+
+@app.post("/extract-text")
+async def extract_text_from_pdf(file: UploadFile = File(...)):
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        contents = await file.read()
+        tmp.write(contents)
+        tmp_path = tmp.name
+
+    text = extract_text(tmp_path)
+    os.unlink(tmp_path)
+
+    return PlainTextResponse(text)
+
 
 @app.get("/", response_class=HTMLResponse)
 async def main(request: Request):
@@ -50,7 +68,7 @@ async def classificator(request: Request, upload_file: UploadFile):
             res = f.readlines()
         return templates.TemplateResponse(
             "index.html",
-            {"request": request, "book_text": book_text, "res_text": res}
+            {"request": request, "res_text": res}
         )
     except Exception as e:
         return {"message": f"There was an error uploading the file: {str(e)}"}

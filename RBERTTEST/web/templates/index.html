@@ -19,7 +19,7 @@
                 </div>
 
                 <div class="info">
-                    <div class="book">{{ book_text }}</div>
+                    <div class="book" id="book-text">{{ book_text }}</div>
                     <div class="bbk_list"> {{ res_text|safe }}</div>
                 </div>
                 <button type="submit" name="action" value="analyze">Классифицировать</button>
@@ -31,17 +31,7 @@
             <button type="submit">Отправить данные</button>
         </div>
     </div>
-    <script>
-        document.getElementById('file').addEventListener('change', function(e) {
-        const fileName = e.target.files[0].name;
-        document.getElementById('file-name').textContent = fileName;
-        document.getElementById('close--one').textContent = '✖';
-        document.getElementById('close--one').onclick = function(){
-            document.getElementById('file-name').textContent = '';
-            document.getElementById('close--one').textContent = '';
-            document.getElementById('file').value = '';
-        };
-    });
-    </script>
+    <script src="static/js/scripts/checktext.js"></script>
+    <script src="static/js/scripts/demotext.js"></script>
 </body>
 </ht
