@@ -11,6 +11,8 @@ from torch import nn
 from sklearn.base import BaseEstimator, RegressorMixin
 import logging
 import os
+import fasttext
+from huggingface_hub import hf_hub_download
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 logging.getLogger("pdfplumber").setLevel(logging.ERROR)
 
@@ -222,10 +224,9 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
             final_scores = {
                 k: v for k, v in results.items()
             }
-
             #Усиление контекста тем, которые содержат ключевые термины
             if final_scores:
-                 cb = contextboost.ContextBoost(final_scores, doc_words, self.explicit_keywords_set)
+                 cb = contextboost.ContextBoost(final_scores, doc_words, self.explicit_keywords_set, self.tokenizer, self.model, doc_embedding)
                  if self.top== 0:
                      cb.processingTop0()
                  elif self.top == 1:

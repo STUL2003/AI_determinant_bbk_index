@@ -1,14 +1,31 @@
 import psycopg2
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.preprocessing import normalize
 
+def processingcheck(func):
+    def wrapper(*arg, **kwarg):
+        try:
+            res = func(*arg, **kwarg)
+            return res
+        except Exception as e:
+            print(e)
+    return wrapper
 
 
 class ContextBoost:
-    def __init__(self, final_scores, doc_words, explicit_keywords):
+    def __init__(self, final_scores, doc_words, explicit_keywords, bert_tokenizer, bert_model, doc_embedding):
         self.__final_scores = final_scores
         self.__doc_words = doc_words
         self.__explicit_keywords = explicit_keywords
         self.__cursor = psycopg2.connect(host="localhost", database="BBK_index", user="postgres", password="Dima2003",
                                          port=5432).cursor()
+        #self.__model_path = hf_hub_download(repo_id="facebook/fasttext-ru-vectors", filename="model.bin")
+        #self.__model = fasttext.load_model("model.bin")
+        self.__similarity_threshold = 0.6
+        self.bert_tokenizer = bert_tokenizer
+        self.bert_model = bert_model
+        self.doc_embedding = doc_embedding
 
     def getKeySet(self, path):
         self.__cursor.execute(f"SELECT * FROM keywords_bbk WHERE path = '{path}'")
@@ -17,6 +34,49 @@ class ContextBoost:
             keyset.add(row[1])
         return keyset
 
+    def _get_embedding(self, text):
+        inputs = self.bert_tokenizer(
+            text,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=512,
+            return_token_type_ids=False
+        )
+        outputs = self.bert_model(**inputs)
+        if hasattr(outputs, 'last_hidden_state'):
+            hidden_states = outputs.last_hidden_state
+        else:
+            hidden_states = outputs[0] if isinstance(outputs, tuple) else outputs
+        embedding = hidden_states.mean(dim=1).detach().numpy()
+
+        embedding = embedding.reshape(1, -1)
+        if embedding.shape[1] < 768:
+            pad =np.zeros((1, 768 - embedding.shape[1]))
+            embedding = np.hstack([embedding, pad])
+        elif embedding.shape[1] > 768:
+            embedding = embedding[:, :768]
+        return embedding
+
+    def intersection(self, keywords, name, thresholds):
+        doc_emb = normalize(self.doc_embedding.reshape(1, -1))
+
+        similarities = []
+        for term in keywords:
+            term_emb = self._get_embedding(term)
+            term_emb = normalize(term_emb.reshape(1, -1))
+            if doc_emb.shape[1] != term_emb.shape[1]:
+                raise ValueError(f"Shape mismatch: doc_emb {doc_emb.shape}, term_emb {term_emb.shape}")
+            sim = cosine_similarity(doc_emb, term_emb)[0][0]
+            similarities.append(sim)
+        matches = sum(sim > self.__similarity_threshold for sim in similarities)
+
+        for th, mul in thresholds:
+            if matches >= th:
+                self.__final_scores[name] *= mul
+                break
+
+    @processingcheck
     def processingTop0(self):
         config = [
             ("22 Физико-математические науки", 22, 5, 1.8, 3, 1.4),
@@ -34,13 +94,25 @@ class ContextBoost:
                 for row in self.__cursor.fetchall():
                     keywords = keywords.union(self.getKeySet(row[0]))
 
-                matches = len((self.__doc_words | self.__explicit_keywords) & keywords)
+                doc_emb = self.doc_embedding.reshape(1, -1)
+                #keywords = {MorphAnalyzer().parse(term)[0].normal_form for term in keywords}
+                topic_embeddings = []
+                for term in keywords:
+                    emb = self._get_embedding(term)
+                    if emb.shape[1] != 768:
+                        emb = emb[:, :768]  # Обрезаем до 768, если необходимо
+                    topic_embeddings.append(emb)
+                topic_embeddings = np.vstack(topic_embeddings)
+
+                similarity_matrix = cosine_similarity(doc_emb, topic_embeddings)
+                matches = np.sum(similarity_matrix > self.__similarity_threshold)
 
                 if matches >= th1:
                     self.__final_scores[name] *= mul1
                 elif matches >= th2:
                     self.__final_scores[name] *= mul2
 
+    @processingcheck
     def processingTop1(self):
         config = [
             ("28.4 Микробиология", 28.4, [(3, 1.5), (1, 1.2)]),
@@ -76,13 +148,10 @@ class ContextBoost:
                 AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 4""")
                 for row in self.__cursor.fetchall():
                     keywords = keywords.union(self.getKeySet(row[0]))
-                    print(keywords)
-                matches = len((self.__doc_words | self.__explicit_keywords) & keywords)
-                for th, mul in sorted(thresholds, reverse=True):
-                    if matches >= th:
-                        self.__final_scores[name] *= mul
-                        break
+               # keywords = {MorphAnalyzer().parse(term)[0].normal_form for term in keywords}
+                self.intersection(keywords, name, thresholds)
 
+    @processingcheck
     def processingTop2(self):
         categories = [
             # Формат: (название, код, [(порог1, множитель1), (порог2, множитель2), ...])
@@ -233,15 +302,13 @@ class ContextBoost:
                     AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 5""")
                 for row in self.__cursor.fetchall():
                     keywords = keywords.union(self.getKeySet(row[0]))
-                matches = len((self.__doc_words | self.__explicit_keywords) & keywords)
-                for min_matches, multiplier in sorted(thresholds, reverse=True):
-                    if matches >= min_matches:
-                        self.__final_scores[name] *= multiplier
-                        break
+               # keywords = {MorphAnalyzer().parse(term)[0].normal_form for term in keywords}
+                self.intersection(keywords, name, thresholds)
 
     def getfinal_scores(self):
         return self.__final_scores
 
+    @processingcheck
     def processingTop3(self):
         categories = [
             ("28.012 Свойства и критерии живого", 28.012, [(5, 2.0), (3, 1.6), (1, 1.2)]),
@@ -681,14 +748,10 @@ class ContextBoost:
             ("22.667 Межзвездная среда", 22.667, [(6, 2.2), (4, 1.8)]),
             ("22.675 Галактика (Млечный Путь)", 22.675, [(6, 2.3), (4, 1.9)]),
             ("22.677 Метагалактика. Внегалактическая астрономия", 22.677, [(6, 2.5), (4, 2.1)]),
-            ("28.644 Генетика отдельных признаков животных", 28.644, [(4, 1.8), (2, 1.5)]),
-            ("28.650 Клетка животных в целом", 28.650, [(5, 2.0), (3, 1.6)])
+            ("28.644 Генетика отдельных признаков животных", 28.644, [(4, 1.8), (2, 1.5)])
         ]
         for name, code, thresholds in categories:
             if name in self.__final_scores:
                 keywords = self.getKeySet(code)
-                matches = len((self.__doc_words | self.__explicit_keywords) & keywords)
-                for min_matches, multiplier in sorted(thresholds, reverse=True):
-                    if matches >= min_matches:
-                        self.__final_scores[name] *= multiplier
-                        break
+            #    keywords = {MorphAnalyzer().parse(term)[0].normal_form for term in keywords}
+                self.intersection(keywords, name, thresholds)

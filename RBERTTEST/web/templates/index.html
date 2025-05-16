@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,6 +14,8 @@
                     <input type="file" name="upload_file" id="file" accept="application/pdf" required>
                     <label for="file">Выберите файл</label>
                     <span id="file-name"></span>
+                    <span id="close--one" style="color: SlateBlue; cursor: pointer;"></span>
+
                 </div>
 
                 <div class="info">
@@ -30,12 +31,17 @@
             <button type="submit">Отправить данные</button>
         </div>
     </div>
-
     <script>
         document.getElementById('file').addEventListener('change', function(e) {
-            const fileName = e.target.files[0].name;
-            document.getElementById('file-name').textContent = fileName;
-        });
+        const fileName = e.target.files[0].name;
+        document.getElementById('file-name').textContent = fileName;
+        document.getElementById('close--one').textContent = '✖';
+        document.getElementById('close--one').onclick = function(){
+            document.getElementById('file-name').textContent = '';
+            document.getElementById('close--one').textContent = '';
+            document.getElementById('file').value = '';
+        };
+    });
     </script>
 </body>
-</html>
+</ht
