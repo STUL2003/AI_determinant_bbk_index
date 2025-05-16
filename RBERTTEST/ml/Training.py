@@ -9,7 +9,7 @@ from tqdm.auto import tqdm
 from torch import nn, optim
 from transformers import AutoTokenizer, BertPreTrainedModel, BertModel
 
-
+#
 # Класс для мониторинга обучения
 class TrainingMonitor:
     def __init__(self):
