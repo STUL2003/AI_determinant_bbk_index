@@ -25,7 +25,7 @@ body {
     height: 400px;
     margin: 20px 0;
 }
-.book, .bbk_list {
+.book, .book-text, .book-list {
     flex: 1;
     border-radius: 10px;
     box-shadow: 0 2px 10px rgba(0,0,0,0.1);

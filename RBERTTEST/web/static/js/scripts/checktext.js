@@ -25,6 +25,7 @@ document.getElementById('file').addEventListener('change', async function(e) {
 });
 
 async function infoLoad() {// Колхоз, но пофиг
+    document.getElementById('book-list').textContent = '';
     while (isProcessing) {
         await new Promise(r => setTimeout(r, 500));
         if (!isProcessing) break;
@@ -40,8 +41,8 @@ async function infoLoad() {// Колхоз, но пофиг
         document.getElementById('book-text').textContent = 'Текст загружается . . .';
     }
 }
-
 document.getElementById('close--one').onclick = function(){
+    isProcessing = false;
     document.getElementById('file-name').textContent = '';
     document.getElementById('close--one').textContent = '';
     document.getElementById('file').value = '';

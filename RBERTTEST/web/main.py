@@ -68,7 +68,7 @@ async def classificator(request: Request, upload_file: UploadFile):
             res = f.readlines()
         return templates.TemplateResponse(
             "index.html",
-            {"request": request, "res_text": res}
+            {"request": request, "book_text": book_text, "res_text": res}
         )
     except Exception as e:
         return {"message": f"There was an error uploading the file: {str(e)}"}
