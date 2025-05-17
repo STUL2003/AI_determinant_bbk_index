@@ -33,8 +33,8 @@ def extract_text( pdf_path, start_page=0):
 
 
 @app.post("/extract-text")
-async def extract_text_from_pdf(file: UploadFile = File(...)):
-
+async def extract_text_from_pdf(file: UploadFile):
+    # delete=False – файл не будет автоматически удаляться после закрытия
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         contents = await file.read()
         tmp.write(contents)
@@ -51,7 +51,6 @@ async def main(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})# рендерим html шаблон и передаем объект request
 
 
-
 @app.post("/files")
 async def classificator(request: Request, upload_file: UploadFile):
     try:
@@ -63,7 +62,6 @@ async def classificator(request: Request, upload_file: UploadFile):
         book_text = extract_text(save_to)
         processor.analyze_document(book_text)
         print("Всё")
-        res = None
         with open("res.txt", "r",  encoding='utf-8') as f:
             res = f.readlines()
         return templates.TemplateResponse(

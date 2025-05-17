@@ -14,7 +14,7 @@
                     <input type="file" name="upload_file" id="file" accept="application/pdf" required>
                     <label for="file">Выберите файл</label>
                     <span id="file-name"></span>
-                    <span id="close--one" style="color: SlateBlue; cursor: pointer;"></span>
+                    <span id="close--one" class="block" style="color: SlateBlue; cursor: pointer;"></span>
 
                 </div>
 
@@ -22,13 +22,13 @@
                     <div class="book" id="book-text">{{ book_text }}</div>
                     <div class="bbk_list" id="book-list"> {{ res_text|safe }}</div>
                 </div>
-                <button type="submit" name="action" value="analyze">Классифицировать</button>
+                <button type="submit" class="block" id="class-btn">Классифицировать</button>
             </form>
         </div>
         <div class="checkinfo">
-            <button type="submit">Просмотреть ключевые термины</button>
-            <button type="submit">Просмотреть все индексы с весами</button>
-            <button type="submit">Отправить данные</button>
+            <button type="submit" class="block">Просмотреть ключевые термины</button>
+            <button type="submit" class="block">Просмотреть все индексы с весами</button>
+            <button type="submit" class="block">Отправить данные</button>
         </div>
     </div>
     <script src="static/js/scripts/checktext.js"></script>
