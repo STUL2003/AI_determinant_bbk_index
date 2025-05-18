@@ -16,8 +16,8 @@ from huggingface_hub import hf_hub_download
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 logging.getLogger("pdfplumber").setLevel(logging.ERROR)
 
+
 class BertWithAttention(nn.Module):
-    """Класс для динамического взвешивания контекста и выделения нужных терминов (улучшенный берт)"""
     def __init__(self, model_name):
         super().__init__()
         self.bert = AutoModel.from_pretrained(model_name) # загрузка с хагингфэйс предобученной модели
@@ -27,16 +27,26 @@ class BertWithAttention(nn.Module):
             nn.Linear(256, 1)
         )
 
+
+    # я пока на нуте без видюхи это (device) не нужно, но потом хочу попробовать
+    # запустить на норм пк
+    # не нужно везде писать условия про CPU / GPU
+    # исключает множество ошибок
+    @property
+    def device(self):
+        return next(self.parameters()).device
+
     def forward(self, input_ids, attention_mask):
-        """Прямой обход"""
+        input_ids = input_ids.to(self.device)
+        attention_mask = attention_mask.to(self.device)
+
         outputs = self.bert(input_ids, attention_mask, return_dict=True)
         hidden_states = outputs.last_hidden_state # извлечение последнего слоя
         weights = torch.softmax(
-            self.attention(hidden_states).squeeze(-1), #механизм внимания
+            self.attention(hidden_states).squeeze(-1),  #механизм внимания
             dim=1
         )
         return torch.sum(weights.unsqueeze(-1) * hidden_states, dim=1)
-
 
 class DocumentProcessor(BaseEstimator, RegressorMixin):
     """Класс по обработке документа"""
@@ -44,14 +54,12 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
             self,
             model_name = "DeepPavlov/rubert-base-cased-sentence",
             #model_name="C:\\AI_determinant_bbk_index\\RBERTTEST\\hierarchical_bbk_model\\final_model",
-            stopwords_file= "stopwords-ru.txt",
             max_seq_length = 512,
             chunk_overlap = 64, # перекрытие между соседними чанками
             bert_weight = 0.5, # вес эмбедингов из BERT
             db_config = None
     ):
         self.model_name = model_name
-        self.stopwords_file = stopwords_file
         self.max_seq_length = max_seq_length
         self.chunk_overlap = chunk_overlap
         self.bert_weight = bert_weight
@@ -71,19 +79,9 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
         try:
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
             self.model = BertWithAttention(self.model_name)
-            self.stopwords = self._load_stopwords()
             self.reference_topics = self._load_reference_topics()
         except Exception as e:
             raise
-
-    def _load_stopwords(self):
-        """Загрузка стопслов"""
-        try:
-            with open(self.stopwords_file, 'r', encoding='utf-8') as f:
-                return {line.strip() for line in f if line.strip()}
-        except Exception as e:
-            return set()
-
 
     def _load_reference_topics(self, our_index = None):
         """Загрузка тем из БД"""

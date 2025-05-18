@@ -2,6 +2,7 @@ import psycopg2
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import normalize
+import torch
 
 def processingcheck(func):
     def wrapper(*arg, **kwarg):
@@ -43,20 +44,13 @@ class ContextBoost:
             max_length=512,
             return_token_type_ids=False
         )
-        outputs = self.bert_model(**inputs)
-        if hasattr(outputs, 'last_hidden_state'):
-            hidden_states = outputs.last_hidden_state
-        else:
-            hidden_states = outputs[0] if isinstance(outputs, tuple) else outputs
-        embedding = hidden_states.mean(dim=1).detach().numpy()
 
-        embedding = embedding.reshape(1, -1)
-        if embedding.shape[1] < 768:
-            pad =np.zeros((1, 768 - embedding.shape[1]))
-            embedding = np.hstack([embedding, pad])
-        elif embedding.shape[1] > 768:
-            embedding = embedding[:, :768]
-        return embedding
+        inputs = {k: v.to(self.bert_model.device) for k, v in inputs.items()}
+
+        with torch.no_grad():
+            embeddings = self.bert_model(**inputs).cpu().numpy()  # теперь [batch_size, hidden_size]
+
+        return embeddings
 
     def intersection(self, keywords, name, thresholds):
         doc_emb = normalize(self.doc_embedding.reshape(1, -1))
