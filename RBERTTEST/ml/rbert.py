@@ -11,11 +11,12 @@ from torch import nn
 from sklearn.base import BaseEstimator, RegressorMixin
 import logging
 import os
-import fasttext
-from huggingface_hub import hf_hub_download
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 logging.getLogger("pdfplumber").setLevel(logging.ERROR)
 
+# CLS - токен, содержащий агрегированную информацию о всём тексте
+# SEP - токен разделитель (пример Разделяет два предложения в задачах, где требуется анализ пар текстов (например, определение схожести предложений, вопрос-ответ))
+# PAD - +- как в CNN нужен для контроля длины
 
 class BertWithAttention(nn.Module):
     def __init__(self, model_name):
@@ -46,6 +47,12 @@ class BertWithAttention(nn.Module):
             self.attention(hidden_states).squeeze(-1),  #механизм внимания
             dim=1
         )
+        # агрегация токенов (простым языком усреднение) в один вектор для всего текста (всегда используется в задачах классификации)
+        # а именно:
+        # принимается матрица токенов (1, num_tokens, 768)
+        # вычисляются веса для каждого токена
+        # умножается каждый токен на его вес
+        # суммируется по оси токенов (dim=1)
         return torch.sum(weights.unsqueeze(-1) * hidden_states, dim=1)
 
 class DocumentProcessor(BaseEstimator, RegressorMixin):
@@ -73,6 +80,10 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
         self.top = 0  # Уровень классификации (0, 1, 2)
         self._initialize_components()
         self._res ={}
+    def __new__(cls, *args, **kwargs):
+        with open("..\\web\\keywords_impact.txt", 'w'):
+            pass
+        return super().__new__(cls)
 
     def _initialize_components(self):
         """Инициализация всех компонентов системы"""
@@ -233,6 +244,8 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
                      cb.processingTop2()
                  elif self.top == 3:
                      cb.processingTop3()
+                 if self.top !=0:
+                     cb.save_imp_keywords("..\\web\\keywords_impact.txt")
                  final_scores = cb.getfinal_scores()
 
             # Рекурсивная иерархическая классификация

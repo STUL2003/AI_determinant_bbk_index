@@ -27,6 +27,7 @@ class ContextBoost:
         self.bert_tokenizer = bert_tokenizer
         self.bert_model = bert_model
         self.doc_embedding = doc_embedding
+        self.__most_imp_keywords = {}
 
     def getKeySet(self, path):
         self.__cursor.execute(f"SELECT * FROM keywords_bbk WHERE path = '{path}'")
@@ -55,7 +56,9 @@ class ContextBoost:
     def intersection(self, keywords, name, thresholds):
         doc_emb = normalize(self.doc_embedding.reshape(1, -1))
 
+        most_imp_trms = []
         similarities = []
+
         for term in keywords:
             term_emb = self._get_embedding(term)
             term_emb = normalize(term_emb.reshape(1, -1))
@@ -63,6 +66,13 @@ class ContextBoost:
                 raise ValueError(f"Shape mismatch: doc_emb {doc_emb.shape}, term_emb {term_emb.shape}")
             sim = cosine_similarity(doc_emb, term_emb)[0][0]
             similarities.append(sim)
+            if sim > self.__similarity_threshold:
+                most_imp_trms.append(term)
+
+
+        if name not in self.__most_imp_keywords:
+            self.__most_imp_keywords[name] = []
+        self.__most_imp_keywords[name].extend(most_imp_trms)
         matches = sum(sim > self.__similarity_threshold for sim in similarities)
 
         for th, mul in thresholds:
@@ -91,13 +101,12 @@ class ContextBoost:
                 doc_emb = self.doc_embedding.reshape(1, -1)
                 #keywords = {MorphAnalyzer().parse(term)[0].normal_form for term in keywords}
                 topic_embeddings = []
+
                 for term in keywords:
                     emb = self._get_embedding(term)
-                    if emb.shape[1] != 768:
-                        emb = emb[:, :768]  # Обрезаем до 768, если необходимо
                     topic_embeddings.append(emb)
-                topic_embeddings = np.vstack(topic_embeddings)
 
+                topic_embeddings = np.vstack(topic_embeddings)
                 similarity_matrix = cosine_similarity(doc_emb, topic_embeddings)
                 matches = np.sum(similarity_matrix > self.__similarity_threshold)
 
@@ -128,10 +137,10 @@ class ContextBoost:
             ("24.2 Органическая химия", 24.2, [(5, 2.0), (3, 1.6), (1, 1.3)]),
             ("24.7 Химия полимеров", 24.7, [(5, 1.9), (3, 1.6), (1, 1.2)]),
             ("24.8 Нанохимия", 24.8, [(6, 2.4), (4, 1.9), (2, 1.5)]),
-            ("24.6 Коллоидная химия", 24.6, [(5, 1.1), (3, 1.0)]),  # Снизить вес
-            ("24.1 Общая и неорганическая химия", 24.1, [(2, 2.5), (1, 2.0)]),  # Увеличить приоритет
-            ("24.4 Аналитическая химия", 24.4, [(3, 1.5)]),
-            ("24.5 Физическая химия", 24.5, [(3, 1.4)])
+            ("24.6 Коллоидная химия", 24.6, [(5, 1.1), (3, 1.0)]),
+            ("24.1 Общая и неорганическая химия", 24.1, [(2, 2.5), (1, 2.0)]),
+            ("24.4 Аналитическая химия", 24.4,[(2, 2.5), (1, 2.0)]),
+            ("24.5 Физическая химия", 24.5, [(2, 2.5), (1, 2.0)])
         ]
 
         for name, code, thresholds in config:
@@ -749,3 +758,14 @@ class ContextBoost:
                 keywords = self.getKeySet(code)
             #    keywords = {MorphAnalyzer().parse(term)[0].normal_form for term in keywords}
                 self.intersection(keywords, name, thresholds)
+
+
+    def save_imp_keywords(self, filename="most_imp_keywords.txt"):
+        try:
+            with open(filename, 'a',encoding='utf-8') as f:
+                for category, terms in self.__most_imp_keywords.items():
+                    unique_terms = list(set(terms))
+                    f.write(f"Категория: {category}\n")
+                    f.write(f"Термины ({len(unique_terms)}): {', '.join(unique_terms)}\n\n")
+        except Exception as e:
+            print(e)
