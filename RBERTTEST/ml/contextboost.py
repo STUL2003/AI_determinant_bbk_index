@@ -765,7 +765,7 @@ class ContextBoost:
             with open(filename, 'a',encoding='utf-8') as f:
                 for category, terms in self.__most_imp_keywords.items():
                     unique_terms = list(set(terms))
-                    f.write(f"Категория: {category}\n")
-                    f.write(f"Термины ({len(unique_terms)}): {', '.join(unique_terms)}\n\n")
+                    f.write(f"Категория: {category}<br>")
+                    f.write(f"Термины ({len(unique_terms)}): {', '.join(unique_terms)}<br><br>")
         except Exception as e:
             print(e)

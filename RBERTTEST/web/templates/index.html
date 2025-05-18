@@ -26,12 +26,21 @@
             </form>
         </div>
         <div class="checkinfo">
-            <button type="submit" class="block">Просмотреть ключевые термины</button>
+            <button type="submit" class="block" id="check--keyterm">Просмотреть ключевые термины</button>
             <button type="submit" class="block">Просмотреть все индексы с весами</button>
             <button type="submit" class="block">Отправить данные</button>
         </div>
+        <div id="myModal" class="modal">
+    <!-- Modal content -->
+            <div class="modal-content">
+                <div class="modal-header">
+                <span class="close">&times;</span>
+                <h2>Ключевые термины</h2>
+                </div>
+                <div class="modal-body" id="model--body">
+                </div>
+            </div>
+        </div>
     </div>
     <script src="static/js/scripts/checktext.js"></script>
-    <script src="static/js/scripts/demotext.js"></script>
 </body>
-</ht

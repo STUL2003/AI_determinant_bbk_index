@@ -245,7 +245,7 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
                  elif self.top == 3:
                      cb.processingTop3()
                  if self.top !=0:
-                     cb.save_imp_keywords("..\\web\\keywords_impact.txt")
+                     cb.save_imp_keywords("..\\web\\static\\data\\keywords_impact.txt")
                  final_scores = cb.getfinal_scores()
 
             # Рекурсивная иерархическая классификация
