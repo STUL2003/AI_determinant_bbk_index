@@ -41,29 +41,29 @@ async function infoLoad() {// Колхоз, но пофиг
     }
 }
 
-async function analyzeLoad() {// Не получилось
-    while (isAnalyze) {
-        const response = await fetch('/check_analyze');
-        const data = await response.json();
+// async function analyzeLoad() {// Не получилось
+//     while (isAnalyze) {
+//         const response = await fetch('/check_analyze');
+//         const data = await response.json();
 
-        if (!data.is_analyzing) {
-            isAnalyze = false;
-            break;
-        }
-        await new Promise(r => setTimeout(r, 500));
-        if (!isAnalyze) break;
-        document.getElementById('book-list').textContent = 'Текст анализируется';
-        await new Promise(r => setTimeout(r, 500));
-        if (!isAnalyze) break;
-        document.getElementById('book-list').textContent = 'Текст анализируется .';
-        await new Promise(r => setTimeout(r, 500));
-        if (!isAnalyze) break;
-        document.getElementById('book-list').textContent = 'Текст анализируется . .';
-        await new Promise(r => setTimeout(r, 500));
-        if (!isAnalyze) break;
-        document.getElementById('book-list').textContent = 'Текст анализируется . . .';
-    }
-}
+//         if (!data.is_analyzing) {
+//             isAnalyze = false;
+//             break;
+//         }
+//         await new Promise(r => setTimeout(r, 500));
+//         if (!isAnalyze) break;
+//         document.getElementById('book-list').textContent = 'Текст анализируется';
+//         await new Promise(r => setTimeout(r, 500));
+//         if (!isAnalyze) break;
+//         document.getElementById('book-list').textContent = 'Текст анализируется .';
+//         await new Promise(r => setTimeout(r, 500));
+//         if (!isAnalyze) break;
+//         document.getElementById('book-list').textContent = 'Текст анализируется . .';
+//         await new Promise(r => setTimeout(r, 500));
+//         if (!isAnalyze) break;
+//         document.getElementById('book-list').textContent = 'Текст анализируется . . .';
+//     }
+// }
 document.getElementById('close--one').onclick = function(){
     isProcessing = false;
     document.getElementById('file-name').textContent = '';

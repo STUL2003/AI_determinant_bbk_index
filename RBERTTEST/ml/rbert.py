@@ -3,7 +3,6 @@ import numpy as np
 import torch
 from transformers import AutoTokenizer, AutoModel
 from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.preprocessing import normalize
 from functools import lru_cache
 import psycopg2
 import RBERTTEST.ml.contextboost as contextboost
@@ -11,38 +10,51 @@ from torch import nn
 from sklearn.base import BaseEstimator, RegressorMixin
 import logging
 import os
-import fasttext
-from huggingface_hub import hf_hub_download
+import pdfplumber
+
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 logging.getLogger("pdfplumber").setLevel(logging.ERROR)
 
-class BertWithAttention(nn.Module):
+
+class ModernBertWithAttention(nn.Module):
     """Класс для динамического взвешивания контекста и выделения нужных терминов (улучшенный берт)"""
     def __init__(self, model_name):
         super().__init__()
-        self.bert = AutoModel.from_pretrained(model_name) # загрузка с хагингфэйс предобученной модели
+        self.bert = AutoModel.from_pretrained(model_name)
+        self.hidden_size = self.bert.config.hidden_size  # автоматическое определение размерности
+
         self.attention = nn.Sequential( # слои
-            nn.Linear(self.bert.config.hidden_size, 256),
+            nn.Linear(self.hidden_size, 256),
             nn.Tanh(),
             nn.Linear(256, 1)
         )
 
     def forward(self, input_ids, attention_mask):
         """Прямой обход"""
-        outputs = self.bert(input_ids, attention_mask, return_dict=True)
-        hidden_states = outputs.last_hidden_state # извлечение последнего слоя
-        weights = torch.softmax(
+        bert_outputs = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            return_dict=True
+        )
+        hidden_states = bert_outputs.last_hidden_state # извлечение последнего слоя
+        attention_weights = torch.softmax(
             self.attention(hidden_states).squeeze(-1), #механизм внимания
             dim=1
         )
-        return torch.sum(weights.unsqueeze(-1) * hidden_states, dim=1)
+
+        # Возвращаем словарь с двумя выходами
+        return {
+            'pooled_output': torch.sum(attention_weights.unsqueeze(-1) * hidden_states, dim=1),
+            'hidden_states': hidden_states
+        }
+
 
 
 class DocumentProcessor(BaseEstimator, RegressorMixin):
     """Класс по обработке документа"""
     def __init__(
             self,
-            model_name = "DeepPavlov/rubert-base-cased-sentence",
+            model_name = "answerdotai/ModernBERT-base",
             #model_name="C:\\AI_determinant_bbk_index\\RBERTTEST\\hierarchical_bbk_model\\final_model",
             stopwords_file= "stopwords-ru.txt",
             max_seq_length = 512,
@@ -70,7 +82,7 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
         """Инициализация всех компонентов системы"""
         try:
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            self.model = BertWithAttention(self.model_name)
+            self.model = ModernBertWithAttention(self.model_name)
             self.stopwords = self._load_stopwords()
             self.reference_topics = self._load_reference_topics()
         except Exception as e:
@@ -162,36 +174,26 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
 
     @lru_cache(maxsize=100) # сохранение результатов для повторяющихся текстов
     def get_embedding(self, text):
-        chunks = self.tokenize_and_chunk(text)
-        if not chunks:
-            return np.zeros((self.model.bert.config.hidden_size,))
+        inputs = self.tokenizer(
+            text,
+            max_length=self.max_seq_length,
+            padding='max_length',
+            truncation=True,
+            return_tensors='pt'
+        )
+        # получение эмбеддинга чанка
+        with torch.no_grad():  #отключаю вычисление градиентов, т.к. модель тестируется
+            outputs = self.model(**inputs)
+            hidden_states = outputs['hidden_states']
+            input_mask = inputs['attention_mask']
 
-        embeddings = []
-        for chunk in chunks:
-            try:
-                inputs = self.tokenizer(
-                    chunk,
-                    return_tensors="pt",
-                    padding="max_length",
-                    truncation=True,
-                    max_length=self.max_seq_length
-                )
-                #https://github.com/allenai/allennlp/issues/5129 Не все модели BERT используют token_type_ids
-                if 'token_type_ids' in inputs:
-                    del inputs['token_type_ids']
-                # получение эмбеддинга чанка
-                with torch.no_grad():  #отключаю вычисление градиентов, т.к. модель тестируется
-                    chunk_emb = self.model(**inputs).numpy()[0]
-                    embeddings.append(chunk_emb)
-            except Exception as e:
-                continue
+            #вычисление mean pooling
+            masked_states = hidden_states * input_mask.unsqueeze(-1)
+            sum_embeddings = torch.sum(masked_states, dim=1)
+            sum_mask = torch.clamp(input_mask.sum(1), min=1e-9)
 
-        if not embeddings:
-            return np.zeros((self.model.bert.config.hidden_size,))
-
-        #усреднение эмбеддингов и нормализация вектора
-        doc_embedding = np.mean(embeddings, axis=0)
-        return normalize(doc_embedding.reshape(1, -1))[0]
+        # Убрали batch-размерность и преобразуем в numpy
+        return (sum_embeddings / sum_mask.unsqueeze(-1)).squeeze(0).numpy()
 
 
 
@@ -217,14 +219,19 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
             results = {}
             for topic, desc in self.reference_topics.items():
                 topic_emb = self.get_embedding(desc)
-
-                cos_sim = cosine_similarity([doc_embedding], [topic_emb])[0][0]
-                results[topic] = (self.bert_weight * cos_sim)
+                #print(doc_embedding.shape, topic_emb.shape)
+                try:
+                    cos_sim = cosine_similarity(doc_embedding.reshape(1, -1),
+                                                topic_emb.reshape(1, -1))[0][0]
+                    results[topic] = (self.bert_weight * cos_sim)
+                except Exception as e:
+                    print(e)
 
             final_scores = {
                 k: v for k, v in results.items()
             }
             #Усиление контекста тем, которые содержат ключевые термины
+
             if final_scores:
                  cb = contextboost.ContextBoost(final_scores, doc_words, self.explicit_keywords_set, self.tokenizer, self.model, doc_embedding)
                  if self.top== 0:
@@ -272,3 +279,22 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
         """Нормализация оценок"""
         total = sum(scores.values())
         return {k: v / total for k, v in scores.items()} if total else {}
+
+def extract_text( pdf_path, start_page=0):
+    """Извлечение текста из PDF с обработкой ошибок"""
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            text_pages = []
+            for i, page in enumerate(pdf.pages[start_page:], start=start_page):
+                text = page.extract_text()
+                if text:
+                    text_pages.append(text)
+            result = " ".join(text_pages) if text_pages else ""
+            return result
+    except Exception as e:
+        return ""
+
+if __name__ == "__main__":
+    processor = DocumentProcessor()
+    book_text = extract_text('books\\22.123.pdf')
+    processor.analyze_document(book_text)

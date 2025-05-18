@@ -2,6 +2,7 @@ import psycopg2
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import normalize
+import torch
 
 def processingcheck(func):
     def wrapper(*arg, **kwarg):
@@ -37,26 +38,24 @@ class ContextBoost:
     def _get_embedding(self, text):
         inputs = self.bert_tokenizer(
             text,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
             max_length=512,
-            return_token_type_ids=False
+            padding='max_length',
+            truncation=True,
+            return_tensors='pt'
         )
-        outputs = self.bert_model(**inputs)
-        if hasattr(outputs, 'last_hidden_state'):
-            hidden_states = outputs.last_hidden_state
-        else:
-            hidden_states = outputs[0] if isinstance(outputs, tuple) else outputs
-        embedding = hidden_states.mean(dim=1).detach().numpy()
+        # получение эмбеддинга чанка
+        with torch.no_grad(): #отключаю вычисление градиентов, т.к. модель тестируется
+            outputs = self.bert_model(**inputs)
+            hidden_states = outputs['hidden_states']
+            input_mask = inputs['attention_mask']
 
-        embedding = embedding.reshape(1, -1)
-        if embedding.shape[1] < 768:
-            pad =np.zeros((1, 768 - embedding.shape[1]))
-            embedding = np.hstack([embedding, pad])
-        elif embedding.shape[1] > 768:
-            embedding = embedding[:, :768]
-        return embedding
+            #вычисление mean pooling
+            masked_states = hidden_states * input_mask.unsqueeze(-1)
+            sum_embeddings = torch.sum(masked_states, dim=1)
+            sum_mask = torch.clamp(input_mask.sum(1), min=1e-9)
+
+        # Убрали batch-размерность и преобразуем в numpy
+        return (sum_embeddings / sum_mask.unsqueeze(-1)).squeeze(0).numpy()
 
     def intersection(self, keywords, name, thresholds):
         doc_emb = normalize(self.doc_embedding.reshape(1, -1))
@@ -67,7 +66,7 @@ class ContextBoost:
             term_emb = normalize(term_emb.reshape(1, -1))
             if doc_emb.shape[1] != term_emb.shape[1]:
                 raise ValueError(f"Shape mismatch: doc_emb {doc_emb.shape}, term_emb {term_emb.shape}")
-            sim = cosine_similarity(doc_emb, term_emb)[0][0]
+            sim = cosine_similarity(doc_emb.reshape(1, -1), term_emb.reshape(1, -1))[0][0]
             similarities.append(sim)
         matches = sum(sim > self.__similarity_threshold for sim in similarities)
 
@@ -89,23 +88,27 @@ class ContextBoost:
             if name in self.__final_scores:
                 keywords = self.getKeySet(code)
                 self.__cursor.execute(rf"""SELECT path FROM index_bbk 
-                    WHERE path::text ~ '{code}' 
-                    AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 3""")
-                for row in self.__cursor.fetchall():
-                    keywords = keywords.union(self.getKeySet(row[0]))
+                        WHERE path::text ~ '{code}' 
+                        AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 3""")
+                # for row in self.__cursor.fetchall():
+                #     keywords = keywords.union(self.getKeySet(row[0])) # офигеешь ждать
 
                 doc_emb = self.doc_embedding.reshape(1, -1)
-                #keywords = {MorphAnalyzer().parse(term)[0].normal_form for term in keywords}
+
                 topic_embeddings = []
                 for term in keywords:
                     emb = self._get_embedding(term)
-                    if emb.shape[1] != 768:
-                        emb = emb[:, :768]  # Обрезаем до 768, если необходимо
+                    if emb.ndim == 1:
+                        emb = emb.reshape(1, -1)
                     topic_embeddings.append(emb)
-                topic_embeddings = np.vstack(topic_embeddings)
 
-                similarity_matrix = cosine_similarity(doc_emb, topic_embeddings)
-                matches = np.sum(similarity_matrix > self.__similarity_threshold)
+                if topic_embeddings:
+                    topic_embeddings = np.concatenate(topic_embeddings, axis=0)
+                    # Вычисление схожесть для всех терминов сразу
+                    similarity_scores = cosine_similarity(doc_emb, topic_embeddings)
+                    matches = np.sum(similarity_scores > self.__similarity_threshold)
+                else:
+                    matches = 0
 
                 if matches >= th1:
                     self.__final_scores[name] *= mul1
@@ -146,8 +149,8 @@ class ContextBoost:
                 self.__cursor.execute(rf"""SELECT path FROM index_bbk 
                 WHERE path::text ~ '{code}' 
                 AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 4""")
-                for row in self.__cursor.fetchall():
-                    keywords = keywords.union(self.getKeySet(row[0]))
+                # for row in self.__cursor.fetchall():
+                #     keywords = keywords.union(self.getKeySet(row[0]))
                # keywords = {MorphAnalyzer().parse(term)[0].normal_form for term in keywords}
                 self.intersection(keywords, name, thresholds)
 
@@ -300,8 +303,8 @@ class ContextBoost:
                 self.__cursor.execute(rf"""SELECT path FROM index_bbk 
                     WHERE path::text ~ '{code}' 
                     AND length(regexp_replace(path::text, '[^0-9]', '', 'g')) = 5""")
-                for row in self.__cursor.fetchall():
-                    keywords = keywords.union(self.getKeySet(row[0]))
+                # for row in self.__cursor.fetchall():
+                #     keywords = keywords.union(self.getKeySet(row[0]))
                # keywords = {MorphAnalyzer().parse(term)[0].normal_form for term in keywords}
                 self.intersection(keywords, name, thresholds)
 
