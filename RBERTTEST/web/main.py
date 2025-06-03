@@ -10,6 +10,7 @@ import RBERTTEST.ml.rbert as rb
 import tempfile
 from fastapi.responses import PlainTextResponse
 import os
+import json
 
 UPLOAD_DIR = Path() / 'uploads'
 
@@ -61,13 +62,25 @@ async def classificator(request: Request, upload_file: UploadFile):
             f.write(data)
         processor = rb.DocumentProcessor()
         book_text = extract_text(save_to)
+        # with open('..\\web\\res.txt', 'w') as f:
+        #     f.write('')
         processor.analyze_document(book_text)
         print("Всё")
-        with open("res.txt", "r",  encoding='utf-8') as f:
-            res = f.readlines()
+        # with open("res.txt", "r",  encoding='utf-8') as f::
+        #     res = f.readlines()
+        with open("..\\web\\static\\data\\results.json", encoding='utf-8') as fh:
+            res = json.load(fh)["final_predictions"]
+        res_ = ""
+        for r in res:
+            res_ +=r['code']+' '+r['name']+"<br>"
+
+        # returns JSON object as a dictionary
+
+
+
         return templates.TemplateResponse(
             "index.html",
-            {"request": request, "book_text": book_text, "res_text": res}
+            {"request": request, "book_text": book_text, "res_text": res_}
         )
     except Exception as e:
         return {"message": f"There was an error uploading the file: {str(e)}"}

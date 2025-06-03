@@ -149,6 +149,8 @@ input[type="file"] {
 
 /* Modal Content */
 .modal-content {
+  max-height: 80vh; /* Ограничиваем высоту контейнера */
+  overflow-y: auto; /* Включаем вертикальную прокрутку */
   position: relative;
   background-color: #252727;
   margin: auto;

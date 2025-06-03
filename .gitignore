@@ -1,4 +1,5 @@
-RBERTTEST\hierarchical_bbk_model\
-RBERTTEST\.idea\
-C:\AI_determinant_bbk_index\RBERTTEST\.venv\
-C:\AI_determinant_bbk_index\RBERTTEST\__pycache__
+RBERTTEST/hierarchical_bbk_model/
+RBERTTEST/.idea/
+RBERTTEST/.venv/
+RBERTTEST/__pycache__/
+list_literature/

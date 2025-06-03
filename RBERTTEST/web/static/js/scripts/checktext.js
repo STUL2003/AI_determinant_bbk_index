@@ -87,33 +87,99 @@ document.getElementById('upload-form').addEventListener('submit', async function
         });
     }
 });
-
-
-
 // Get the modal
-var modal = document.getElementById("myModal");
+var modal1 = document.getElementById("myModal");
 
 // Get the button that opens the modal
-var btn = document.getElementById("check--keyterm");
+var btn1 = document.getElementById("check--keyterm");
 
 // Get the <span> element that closes the modal
-var span = document.getElementsByClassName("close")[0];
+var span1 = document.getElementsByClassName("close")[0]; // первый элемент закрытия
 
-// When the user clicks the button, open the modal 
-btn.onclick = async function() {
-  modal.style.display = "block";
+var modal2 = document.getElementById("myModal2");
+var btn2 = document.getElementById("check--indexinfo");
+var span2 = document.getElementsByClassName("close")[1]; // второй элемент закрытия
+
+// When the user clicks the button, open the modal
+btn1.onclick = async function() {
+  modal1.style.display = "block";
   const response = await fetch('/static/data/keywords_impact.txt');
   const data = await response.text();
-  document.getElementById("model--body").textContent = data;
+  document.getElementById("model--body").innerHTML = data.replace(/\n/g, '<br>');
 };
 // When the user clicks on <span> (x), close the modal
-span.onclick = function() {
-  modal.style.display = "none";
+span1.onclick = function() {
+  modal1.style.display = "none";
+}
+
+btn2.onclick = async function() {
+  modal2.style.display = "block";
+
+  const response = await fetch('/static/data/results.json');
+  const data = await response.json();
+
+
+  let content = `<div class="hierarchy-tree">`;
+
+    // Перебираем все уровни иерархии
+  data.tree.forEach(level => {
+    const isSecondary = level.is_secondary || false;
+    const secondaryClass = isSecondary ? "secondary-branch" : "";
+
+    content += `
+      <div class="tree-level ${secondaryClass}">
+        <div class="level-header">
+          <span class="level-title">Уровень ${level.level}${isSecondary ? " (дополнительная ветка)" : ""}</span>
+        </div>
+        <div class="level-content">
+          <ul class="level-results">`;
+
+      // Перебираем все результаты в этом уровне
+    level.results.forEach(item => {
+      const score=item.score ? item.score.toFixed(4) : "N/A";
+      content += `
+        <li>
+          <span class="code">${item.code}</span>
+          <span class="name">${item.name}</span>
+          <span class="score">${score}</span>
+        </li>`;
+    });
+
+    content += `
+          </ul>
+        </div>
+      </div>`;
+  });
+
+  content += `</div>`;
+  document.getElementById("model--body2").innerHTML = content;
+
+  const headers = document.querySelectorAll('.level-header');
+  headers.forEach(header => {
+    header.addEventListener('click', function() {
+      const content = this.nextElementSibling;
+      const icon = this.querySelector('.toggle-icon');
+      if (content.style.display === "block") {
+        content.style.display = "none";
+        icon.textContent = "►";
+      } else {
+        content.style.display = "block";
+        icon.textContent = "▼";
+      }
+    });
+  });
+};
+
+span2.onclick = function() {
+  modal2.style.display = "none";
 }
 
 // When the user clicks anywhere outside of the modal, close it
 window.onclick = function(event) {
-  if (event.target == modal) {
-    modal.style.display = "none";
+  if (event.target == modal1) {
+    modal1.style.display = "none";
+  }
+  if (event.target == modal2) {
+    modal2.style.display = "none";
   }
 }

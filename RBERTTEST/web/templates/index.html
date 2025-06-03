@@ -15,9 +15,7 @@
                     <label for="file">Выберите файл</label>
                     <span id="file-name"></span>
                     <span id="close--one" class="block" style="color: SlateBlue; cursor: pointer;"></span>
-
                 </div>
-
                 <div class="info">
                     <div class="book" id="book-text">{{ book_text }}</div>
                     <div class="bbk_list" id="book-list"> {{ res_text|safe }}</div>
@@ -27,19 +25,29 @@
         </div>
         <div class="checkinfo">
             <button type="submit" class="block" id="check--keyterm">Просмотреть ключевые термины</button>
-            <button type="submit" class="block">Просмотреть все индексы с весами</button>
+            <button type="submit" class="block" id="check--indexinfo">Просмотреть все индексы с весами</button>
             <button type="submit" class="block">Отправить данные</button>
         </div>
+        <!-- В первом модальном окне -->
         <div id="myModal" class="modal">
-    <!-- Modal content -->
-            <div class="modal-content">
-                <div class="modal-header">
-                <span class="close">&times;</span>
-                <h2>Ключевые термины</h2>
-                </div>
-                <div class="modal-body" id="model--body">
-                </div>
+          <div class="modal-content">
+            <div class="modal-header">
+              <span class="close">&times;</span> <!-- Первый крестик -->
+              <h2>Ключевые термины</h2>
             </div>
+            <div class="modal-body" id="model--body"></div>
+          </div>
+        </div>
+
+        <!-- Во втором модальном окне -->
+        <div id="myModal2" class="modal">
+          <div class="modal-content">
+            <div class="modal-header">
+              <span class="close">&times;</span> <!-- Второй крестик -->
+              <h2>Информация об индексах</h2>
+            </div>
+            <div class="modal-body" id="model--body2"></div>
+          </div>
         </div>
     </div>
     <script src="static/js/scripts/checktext.js"></script>

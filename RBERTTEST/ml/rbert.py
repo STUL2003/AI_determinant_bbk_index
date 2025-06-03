@@ -11,6 +11,7 @@ from torch import nn
 from sklearn.base import BaseEstimator, RegressorMixin
 import logging
 import os
+import json
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 logging.getLogger("pdfplumber").setLevel(logging.ERROR)
 
@@ -64,7 +65,8 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
             max_seq_length = 512,
             chunk_overlap = 64, # перекрытие между соседними чанками
             bert_weight = 0.5, # вес эмбедингов из BERT
-            db_config = None
+            db_config = None,
+            top_k=2
     ):
         self.model_name = model_name
         self.max_seq_length = max_seq_length
@@ -203,80 +205,160 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
         return normalize(doc_embedding.reshape(1, -1))[0]
 
 
-
-    def analyze_document(self, text = None):
-        """Метод для анализа текста"""
-        with open('..\\web\\res.txt', 'w') as f:
-            f.write('')
+    def analyze_document(self, text=None):
         try:
             if text is None:
-                    raise ValueError()
+                raise ValueError("Text is required for analysis")
+
+            if self.top == 0:
+                self.all_results = {
+                    "tree": [],
+                    "final_predictions": [],
+                }
+                self.current_tree = []
             #Обработка
             clean_text = self.preprocess_text(text)
             explicit_keywords = self.extract_keywords(text)
             enhanced_text = clean_text + " " + " ".join(explicit_keywords * 3)
+
 
             #Эмбендингирование
             doc_embedding = self.get_embedding(enhanced_text)
             doc_words = set(enhanced_text.split())
             self.explicit_keywords_set = set(explicit_keywords)
 
-            #Для каждой темы из БД вычисляется её эмбеддинг,
-            #к осинусная схожесть между вектором документа и темы умножается на вес берт в финальной оценке
+            # Для каждой темы из БД вычисляется её эмбеддинг,
+            # к осинусная схожесть между вектором документа и темы умножается на вес берт в финальной оценке
             results = {}
             for topic, desc in self.reference_topics.items():
                 topic_emb = self.get_embedding(desc)
-
                 cos_sim = cosine_similarity([doc_embedding], [topic_emb])[0][0]
-                results[topic] = (self.bert_weight * cos_sim)
+                results[topic] = self.bert_weight * cos_sim
 
-            final_scores = {
-                k: v for k, v in results.items()
-            }
+            final_scores = {k: v for k, v in results.items()}
+
             #Усиление контекста тем, которые содержат ключевые термины
             if final_scores:
-                 cb = contextboost.ContextBoost(final_scores, doc_words, self.explicit_keywords_set, self.tokenizer, self.model, doc_embedding)
-                 if self.top== 0:
-                     cb.processingTop0()
-                 elif self.top == 1:
-                     cb.processingTop1()
-                 elif self.top == 2:
-                     cb.processingTop2()
-                 elif self.top == 3:
-                     cb.processingTop3()
-                 if self.top !=0:
-                     cb.save_imp_keywords("..\\web\\static\\data\\keywords_impact.txt")
-                 final_scores = cb.getfinal_scores()
+                cb = contextboost.ContextBoost(
+                    final_scores,
+                    doc_words,
+                    self.explicit_keywords_set,
+                    self.tokenizer,
+                    self.model,
+                    doc_embedding
+                )
+
+                if self.top == 0:
+                    cb.processingTop0()
+                elif self.top == 1:
+                    cb.processingTop1()
+                elif self.top == 2:
+                    cb.processingTop2()
+                elif self.top == 3:
+                    cb.processingTop3()
+
+                if self.top != 0:
+                    cb.save_imp_keywords("..\\web\\static\\data\\keywords_impact.txt")
+
+                final_scores = cb.getfinal_scores()
+                normalized_scores = self._normalize_scores(final_scores)
+            else:
+                normalized_scores = {}
+
+            # Сохраняем результаты текущего уровня
+            level_results = []
+            for topic, score in sorted(normalized_scores.items(),
+                                       key=lambda x: x[1],
+                                       reverse=True):
+                code, name = topic.split(" ", 1)
+                level_results.append({
+                    "code": code,
+                    "name": name,
+                    "score": float(f"{score:.4f}")
+                })
+
+            self.current_tree.append({
+                "level": self.top,
+                "results": level_results
+            })
 
             # Рекурсивная иерархическая классификация
             if self.top < 3 and final_scores:
                 self.top += 1
 
                 # Выбор лучшей темы, в чей узел спуститься рекурсия
-                best_topic = max(final_scores.items(), key=lambda x: x[1])
-                our_index = best_topic[0].split()[0]
-                self.reference_topics = self._load_reference_topics(our_index)
-                self.recursive_scores = self.analyze_document(text=text)
+                best_topic = max(normalized_scores.items(), key=lambda x: x[1])
+                best_code = best_topic[0].split()[0]
 
-                #Запись тем в файл, инфа с которого будет выводиться на экран (надо сделать вывод более информативным)
-                if self.top ==  3:
-                    with open("..\\web\\res.txt", "a", encoding="utf-8") as f:
-                        f.write("<br>".join([f"{k}: {v:.4f}" for k, v in sorted(self._normalize_scores(final_scores).items(), key=lambda item: item[1], reverse=True)[:4]]) + "<br><br>")
-                else:
-                    with open("..\\web\\res.txt", "a", encoding="utf-8") as f:
-                        f.write("<br>".join([f"{k}: {v:.4f}" for k, v in
-                                           sorted(self._normalize_scores(final_scores).items(),
-                                                  key=lambda item: item[1], reverse=True)[:4]]) + "<br><br>")
+                # Для доп инфы
+                if self.top == 2:
+                    self.secondary_candidates = [
+                        item for item in normalized_scores.items()
+                        if item[0] != best_topic[0]
+                    ]
+
+                self.reference_topics = self._load_reference_topics(best_code)
+                self.analyze_document(text=text)
+
+
                 self.top -= 1
 
-                return
-            with open("..\\web\\res.txt", "a", encoding="utf-8") as f:
-                f.write("<br>".join([f"{k}: {v:.4f}" for k, v in
-                                   sorted(self._normalize_scores(final_scores).items(), key=lambda item: item[1],
-                                          reverse=True)[:4]]) + "<br><br>")
-            return
+                # Обработка второстепенной ветки
+                if self.top == 1 and hasattr(self, 'secondary_candidates') and self.secondary_candidates:
+
+                    secondary_topic = max(self.secondary_candidates, key=lambda x: x[1])
+                    secondary_code = secondary_topic[0].split()[0]
+                    main_tree = self.current_tree.copy()
+
+                    self.top = 2
+                    self.reference_topics = self._load_reference_topics(secondary_code)
+
+                    temp_tree = []
+                    self.current_tree = temp_tree
+                    self.analyze_document(text=text)
+
+                    # Извлекаем результаты уровня 3 из второстепенной ветки
+                    if temp_tree and len(temp_tree) > 0:
+                        secondary_level3 = next(
+                            (level for level in temp_tree if level["level"] == 3),
+                            None
+                        )
+                        if secondary_level3:
+                            secondary_level3["is_secondary"] = True
+                            main_tree.append(secondary_level3)
+
+                    # восстановление иерархии
+                    self.current_tree = main_tree
+                    self.top = 1
+
+            # Сохранение финальных результатов
+            if self.top == 0:
+                self.all_results["tree"] = self.current_tree
+
+                # формирование финальные предсказания (только основные ветки)
+                top_predictions = []
+                for level_data in self.current_tree:
+                    if level_data["results"]:
+                        best = level_data["results"][0]
+                        if not level_data.get("is_secondary", False):
+                            top_predictions.append({
+                                "level": level_data["level"],
+                                "code": best["code"],
+                                "name": best["name"],
+                                "score": best["score"]
+                            })
+
+                self.all_results["final_predictions"] = top_predictions
+
+                # сохранение
+                with open("..\\web\\static\\data\\results.json", "w", encoding="utf-8") as f:
+                    json.dump(self.all_results, f, ensure_ascii=False, indent=2)
+
+            return self.all_results
 
         except Exception as e:
+            import traceback
+            print(f"Error in analyze_document: {e}\n{traceback.format_exc()}")
             return {}
 
     def _normalize_scores(self, scores):
