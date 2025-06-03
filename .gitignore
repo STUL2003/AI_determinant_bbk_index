@@ -3,3 +3,4 @@ RBERTTEST/.idea/
 RBERTTEST/.venv/
 RBERTTEST/__pycache__/
 list_literature/
+*.ipynb
