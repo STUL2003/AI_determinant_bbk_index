@@ -61,7 +61,7 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
     def __init__(
             self,
             model_name = "DeepPavlov/rubert-base-cased-sentence",
-            #model_name="C:\\AI_determinant_bbk_index\\RBERTTEST\\hierarchical_bbk_model\\final_model",
+            #model_name="C:\\AI_determinant_bbk_index\\RBERTTEST\\ml\\hierarchical_bbk_model\\final_model",
             max_seq_length = 512,
             chunk_overlap = 64, # перекрытие между соседними чанками
             bert_weight = 0.5, # вес эмбедингов из BERT
@@ -73,7 +73,7 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
         self.chunk_overlap = chunk_overlap
         self.bert_weight = bert_weight
         self.db_config = db_config or {
-            'host': 'localhost',
+            'host': 'host.docker.internal',
             'database': 'BBK_index',
             'user': 'postgres',
             'password': 'Dima2003',
@@ -82,10 +82,17 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
         self.top = 0  # Уровень классификации (0, 1, 2)
         self._initialize_components()
         self._res ={}
-    def __new__(cls, *args, **kwargs):
-        with open("..\\web\\keywords_impact.txt", 'w'):
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        self.base_dir = os.path.dirname(os.path.dirname(current_dir))
+        self.web_dir = os.path.join(self.base_dir, 'RBERTTEST', 'web')
+        self.static_data_dir = os.path.join(self.web_dir, 'static', 'data')
+
+        os.makedirs(self.static_data_dir, exist_ok=True)
+
+        self.keywords_path = os.path.join(self.static_data_dir, 'keywords_impact.txt')
+        self.results_path = os.path.join(self.static_data_dir, 'results.json')
+        with open(self.keywords_path, 'w', encoding='utf-8') as f:
             pass
-        return super().__new__(cls)
 
     def _initialize_components(self):
         """Инициализация всех компонентов системы"""
@@ -258,7 +265,7 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
                     cb.processingTop3()
 
                 if self.top != 0:
-                    cb.save_imp_keywords("..\\web\\static\\data\\keywords_impact.txt")
+                    cb.save_imp_keywords(self.keywords_path)
 
                 final_scores = cb.getfinal_scores()
                 normalized_scores = self._normalize_scores(final_scores)
@@ -351,7 +358,7 @@ class DocumentProcessor(BaseEstimator, RegressorMixin):
                 self.all_results["final_predictions"] = top_predictions
 
                 # сохранение
-                with open("..\\web\\static\\data\\results.json", "w", encoding="utf-8") as f:
+                with open(self.results_path, "w", encoding="utf-8") as f:
                     json.dump(self.all_results, f, ensure_ascii=False, indent=2)
 
             return self.all_results

@@ -19,7 +19,7 @@ class ContextBoost:
         self.__final_scores = final_scores
         self.__doc_words = doc_words
         self.__explicit_keywords = explicit_keywords
-        self.__cursor = psycopg2.connect(host="localhost", database="BBK_index", user="postgres", password="Dima2003",
+        self.__cursor = psycopg2.connect(host='host.docker.internal', database="BBK_index", user="postgres", password="Dima2003",
                                          port=5432).cursor()
         #self.__model_path = hf_hub_download(repo_id="facebook/fasttext-ru-vectors", filename="model.bin")
         #self.__model = fasttext.load_model("model.bin")

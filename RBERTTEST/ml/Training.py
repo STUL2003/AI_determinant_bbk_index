@@ -8,6 +8,7 @@ import psycopg2
 from tqdm.auto import tqdm
 from torch import nn, optim
 from transformers import AutoTokenizer, BertPreTrainedModel, BertModel
+import uuid
 
 #
 # Класс для мониторинга обучения
@@ -41,7 +42,7 @@ class TrainingMonitor:
 class TrainingConfig:
     csv_path= "books.csv"
     db_config= {
-        'host': 'localhost',
+        'host': 'host.docker.internal',
         'database': 'BBK_index',
         'user': 'postgres',
         'password': 'Dima2003',
@@ -51,7 +52,8 @@ class TrainingConfig:
     max_length= 512
     epochs_per_file= 3 # количество эпох для каждого файла
     learning_rate = 2e-5
-    save_dir = "hierarchical_bbk_model"
+   # save_dir = "..\\ml\\hierarchical_bbk_model\\final_model"
+    save_dir = "/app/ml/hierarchical_bbk_model/final_model" # для докера
     checkpoint: int = 10  # Частота сохранения модели (по количеству файлов)
 
 # Класс для работы с данными
@@ -185,18 +187,133 @@ class HierarchicalBERT(BertPreTrainedModel):
             loss /= len(logits)
         return {'loss': loss, 'logits': logits}
 
+
+from contextlib import contextmanager
+import shutil
+
 # Функция обучения
-def train(config: TrainingConfig = TrainingConfig()):
+def train(
+        config: TrainingConfig = TrainingConfig(),
+        mode: str = "full",  # "full" или "incremental"
+        text: str = None,
+        bbk_id: str = None
+):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    base_dir = os.path.dirname(os.path.dirname(current_dir))
+    finale_model_dir = os.path.join(base_dir, 'RBERTTEST/ml/hierarchical_bbk_model/final_model')
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     os.makedirs(config.save_dir, exist_ok=True)
+
+    # Режим дообучения (используется временный файл)
+    if mode == "incremental":
+        if not text or not bbk_id:
+            raise ValueError("Для инкрементального обучения нужны текст и bbk_id")
+
+        # временный csv
+        temp_csv = os.path.join(config.save_dir, "temp_incremental.csv")
+        pd.DataFrame([{"path": "memory", "id": bbk_id}]).to_csv(temp_csv, index=False)
+        config.csv_path = temp_csv
+
     processor = BBKProcessor(config)
-    model = HierarchicalBERT.from_pretrained(
-        config.model_name,
-        num_labels_per_level=processor.num_labels
-    ).to(device)
-    optimizer = optim.AdamW(model.parameters(), lr=config.learning_rate)
     monitor = TrainingMonitor()
 
+    @contextmanager
+    def load_model_for_training():
+        model_path = finale_model_dir
+        try:
+            # Фигня с потоками, поэтому нужна отдельная папка
+            temp_dir = os.path.join(config.save_dir, f"temp_model_{uuid.uuid4().hex}")
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+            shutil.copytree(model_path, temp_dir) # копирование в отдельную папку
+
+            model=HierarchicalBERT.from_pretrained( # загрузка из временной папки
+                temp_dir,
+                num_labels_per_level=processor.num_labels
+            ).to(device)
+
+            yield model
+        finally:
+            # Очистка
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+    if mode == "full":
+        model = HierarchicalBERT.from_pretrained(
+            config.model_name,
+            num_labels_per_level=processor.num_labels
+        ).to(device)
+    else:
+        model_path = finale_model_dir
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Базовая модель не найдена: {model_path}")
+
+        model = HierarchicalBERT.from_pretrained(
+            model_path,
+            num_labels_per_level=processor.num_labels
+        ).to(device)
+
+    optimizer = optim.AdamW(model.parameters(), lr=config.learning_rate)
+
+    # Дообучение на одном файле
+    if mode == "incremental":
+        class MemoryProcessor:
+            def __init__(self, text, bbk_id, processor):
+                self.text = text
+                self.bbk_id = bbk_id
+                self.processor = processor
+
+            def process(self):
+                labels = self.processor._get_hierarchical_labels(self.bbk_id)
+                inputs = self.processor.tokenizer(
+                    self.processor._enrich_text(self.text, self.bbk_id),
+                    max_length=self.processor.config.max_length,
+                    padding='max_length',
+                    truncation=True,
+                    return_tensors='pt'
+                )
+                return{
+                    'input_ids': inputs['input_ids'].squeeze(),
+                    'attention_mask': inputs['attention_mask'].squeeze(),
+                    'labels': torch.tensor(labels, dtype=torch.long)
+                }
+
+        # Обработка текст из памяти
+        mem_processor=MemoryProcessor(text, bbk_id, processor)
+        file_data=mem_processor.process()
+        file_name ="IN_MEMORY_TEXT"
+
+        with load_model_for_training() as model:
+            optimizer = optim.AdamW(model.parameters(), lr=config.learning_rate)
+
+            # Дообучение
+            for epoch in range(config.epochs_per_file):
+                monitor.start_epoch(epoch, config.epochs_per_file, file_name)
+                model.train()
+                optimizer.zero_grad()
+
+                inputs ={
+                    'input_ids': file_data['input_ids'].unsqueeze(0).to(device),
+                    'attention_mask': file_data['attention_mask'].unsqueeze(0).to(device),
+                    'labels': file_data['labels'].to(device)
+                }
+                outputs=model(**inputs)
+                loss = outputs['loss']
+                loss.backward()
+                optimizer.step()
+
+                monitor.update_batch(loss.item())
+                monitor.end_epoch(epoch, loss.item())
+
+            final_save_path =finale_model_dir
+            model.save_pretrained(final_save_path)
+            processor.tokenizer.save_pretrained(final_save_path)
+            print(f"\n Модель сохранена в: {final_save_path}")
+        return
+
+    # Стандартный режим обучения
     print("\n[Обучение] Старт цикла обучения по файлам...")
     for file_idx in range(len(processor.data)):
         file_data = processor.process_file(file_idx)
@@ -232,7 +349,7 @@ def train(config: TrainingConfig = TrainingConfig()):
     print(f"\n[Завершение] Модель сохранена в: {final_save_path}")
 
 
-if __name__ == "__main__":
-    print("=== Запуск обучения ===")
-    train()
-    print("=== Обучение завершено ===")
+#if __name__ == "__main__":
+#    print("=== Запуск обучения ===")
+#    train()
+#    print("=== Обучение завершено ===")

@@ -100,6 +100,10 @@ var modal2 = document.getElementById("myModal2");
 var btn2 = document.getElementById("check--indexinfo");
 var span2 = document.getElementsByClassName("close")[1]; // второй элемент закрытия
 
+var modal3 = document.getElementById("myModal3");
+var btn3 = document.getElementById("send--data");
+var span3 = document.getElementsByClassName("close")[2]; // второй элемент закрытия
+
 // When the user clicks the button, open the modal
 btn1.onclick = async function() {
   modal1.style.display = "block";
@@ -174,6 +178,13 @@ span2.onclick = function() {
   modal2.style.display = "none";
 }
 
+btn3.onclick = function(){
+    modal3.style.display = "block";
+}
+
+span3.onclick = function() {
+  modal3.style.display = "none";
+}
 // When the user clicks anywhere outside of the modal, close it
 window.onclick = function(event) {
   if (event.target == modal1) {
@@ -182,4 +193,37 @@ window.onclick = function(event) {
   if (event.target == modal2) {
     modal2.style.display = "none";
   }
+  if (event.target == modal3) {
+    modal3.style.display = "none";
+  }
+}
+
+document.getElementById('send-index').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(this);
+
+    fetch('/trainindexes', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Показываем сообщение без перезагрузки
+        showFlashMessage(data.message || "Данные отправлены на дообучение");
+    })
+    .catch(error => {
+        showFlashMessage("Ошибка: " + error.message);
+    });
+});
+
+function showFlashMessage(message) {
+    const flash = document.createElement('div');
+    flash.className = 'flash-message';
+    flash.textContent = message;
+    document.body.appendChild(flash);
+
+    setTimeout(() => {
+        flash.remove();
+    }, 5000);
 }

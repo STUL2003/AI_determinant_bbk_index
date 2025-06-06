@@ -2,5 +2,6 @@ RBERTTEST/hierarchical_bbk_model/
 RBERTTEST/.idea/
 RBERTTEST/.venv/
 RBERTTEST/__pycache__/
+RBERTTEST/ml/hierarchical_bbk_model/final_model/
 list_literature/
 *.ipynb

@@ -1,3 +1,32 @@
+<style>
+.flash-message {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 15px;
+    background-color: #f8d7da;
+    color: #721c24;
+    border-radius: 5px;
+    z-index: 1000;
+    box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    text-align: center;
+
+    /* Анимация исчезновения */
+    animation: fadeOut 1s ease-in 5s forwards;
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; display: none; }
+}
+</style>
+
+{% if request.query_params.get('message') %}
+<div class="flash-message">
+    {{ request.query_params.get('message') }}
+</div>
+{% endif %}
 <!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
@@ -6,7 +35,7 @@
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <h1>AI BBK</h1>
+    <h1>ББК-ОПРЕДЕЛИТЕЛЬ</h1>
     <div class="container">
         <div class="analyze">
             <form action="/files" method="post" enctype="multipart/form-data" id="upload-form">
@@ -26,7 +55,7 @@
         <div class="checkinfo">
             <button type="submit" class="block" id="check--keyterm">Просмотреть ключевые термины</button>
             <button type="submit" class="block" id="check--indexinfo">Просмотреть все индексы с весами</button>
-            <button type="submit" class="block">Отправить данные</button>
+            <button type="submit" class="block" id="send--data">Отправить данные</button>
         </div>
         <!-- В первом модальном окне -->
         <div id="myModal" class="modal">
@@ -50,5 +79,21 @@
           </div>
         </div>
     </div>
+
+    <!-- В третьем модальном окне -->
+        <div id="myModal3" class="modal">
+          <div class="modal-content">
+            <div class="modal-header">
+              <span class="close">&times;</span> <!-- Первый крестик -->
+              <h2>Впишите индекс для текста</h2>
+            </div>
+              <form action="/trainindexes" method="post" id="send-index">
+                <div class="modal-body" id="model--body3"></div>
+                  <input type="text" id="real--index" name="real_index" size="10">
+                  <button type="submit" class="block" id="send--real_data">Отправить индекс</button>
+              </form>
+
+          </div>
+        </div>
     <script src="static/js/scripts/checktext.js"></script>
 </body>
